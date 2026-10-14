@@ -8,7 +8,7 @@ use solex_core::{
 
 use crate::{
     commands,
-    components::{self, NoticeLevel},
+    components::{self, NoticeLevel, boxed},
     style,
 };
 
@@ -82,29 +82,36 @@ impl TerminateCommand {
         };
         println!(
             "{}",
-            components::fields(&[
-                ("channel", components::channel(&plan.channel)),
-                ("target", target),
-                (
-                    "cluster",
-                    plan.cluster
-                        .clone()
-                        .unwrap_or_else(|| "(solana CLI default)".into()),
-                ),
-                (
-                    "authority",
-                    plan.authority
-                        .as_ref()
-                        .map(|p| p.display().to_string())
-                        .unwrap_or_default(),
-                ),
-                (
-                    "recipient",
-                    plan.recipient
-                        .clone()
-                        .unwrap_or_else(|| "(solana CLI default keypair)".into()),
-                ),
-            ])
+            boxed::frame(&[boxed::section(
+                &[
+                    boxed::styled(
+                        style::bold(&components::channel(&plan.channel)),
+                        &plan.channel
+                    ),
+                    boxed::plain(plan.cluster.clone().unwrap_or_default()),
+                ],
+                boxed::plain(""),
+                &[
+                    ("target", boxed::plain(target)),
+                    (
+                        "authority",
+                        boxed::plain(
+                            plan.authority
+                                .as_ref()
+                                .map(|p| p.display().to_string())
+                                .unwrap_or_default(),
+                        ),
+                    ),
+                    (
+                        "recipient",
+                        boxed::plain(
+                            plan.recipient
+                                .clone()
+                                .unwrap_or_else(|| "solana CLI default keypair".into()),
+                        ),
+                    ),
+                ],
+            )])
         );
 
         if !self.yes {

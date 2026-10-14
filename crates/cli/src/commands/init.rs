@@ -2,8 +2,9 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use clap::{Args, ValueEnum};
 use solex_core::{CoreError, Result, scaffold, types::Format};
+use solex_types;
 
-use crate::{components, style};
+use crate::{components, components::boxed, style};
 
 #[derive(Args, Debug)]
 pub struct InitCommand {
@@ -71,6 +72,32 @@ impl InitCommand {
         };
         let created = scaffold::init(&self.path, &opts)?;
 
+        let m = solex_types::load(&created.root.join(match opts.format {
+            Format::Toml => "Solex.toml",
+            Format::Yaml => "Solex.yaml",
+        }))?;
+        let sections: Vec<Vec<boxed::Line>> = created
+            .program_ids
+            .iter()
+            .map(|(ch, id)| {
+                let cluster = m
+                    .channels()
+                    .channel(ch)
+                    .map(|c| c.cluster.0.join(", "))
+                    .unwrap_or_default();
+                boxed::section(
+                    &[
+                        boxed::styled(style::bold(&components::channel(ch)), ch),
+                        boxed::plain(cluster),
+                    ],
+                    boxed::plain(""),
+                    &[
+                        ("program", boxed::plain(id.clone())),
+                        ("keypair", boxed::plain(format!("keys/{ch}.json"))),
+                    ],
+                )
+            })
+            .collect();
         println!(
             "{}",
             components::ok(&format!(
@@ -79,19 +106,7 @@ impl InitCommand {
                 style::dim(&created.root.display().to_string())
             ))
         );
-        let width = created
-            .program_ids
-            .iter()
-            .map(|(ch, _)| ch.chars().count())
-            .max()
-            .unwrap_or(0);
-        for (ch, id) in &created.program_ids {
-            println!(
-                "    {}{}  {id}",
-                components::channel(ch),
-                " ".repeat(width - ch.chars().count())
-            );
-        }
+        println!("{}", boxed::frame(&sections));
         let first = &self.channels[0];
         let steps = [
             (format!("cd {}", self.name), String::new()),

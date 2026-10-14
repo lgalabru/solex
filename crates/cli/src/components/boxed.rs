@@ -81,12 +81,60 @@ pub fn join(parts: &[Line]) -> Line {
 
 /// `label` padded to a fixed column, then `value`.
 pub fn field(label: &str, value: Line) -> Line {
-    const LABEL: usize = 9;
-    let l = format!("{label:<LABEL$}");
+    let l = format!("{label:<FIELD_LABEL$}");
     (
         format!("{} {}", style::dim(&l), value.0),
-        LABEL + 1 + value.1,
+        FIELD_LABEL + 1 + value.1,
     )
+}
+
+/// A styled fragment with its visible width taken from `plain`.
+pub fn styled(styled: String, plain: &str) -> Line {
+    (styled, plain.chars().count())
+}
+
+/// A standard section: a header made of `head` fragments with `right` on the
+/// far side, then labelled fields. Fields with an empty value are skipped and
+/// long values wrap under the label.
+pub fn section(head: &[Line], right: Line, fields: &[(&str, Line)]) -> Vec<Line> {
+    let mut lines = vec![split(join(head), right)];
+    for (label, value) in fields {
+        if value.0.is_empty() {
+            continue;
+        }
+        if value.1 + FIELD_LABEL + 1 <= INNER {
+            lines.push(field(label, value.clone()));
+        } else {
+            // Values that cannot fit (paths) are plain text: wrap them.
+            let plain: String = console::strip_ansi_codes(&value.0).into_owned();
+            let mut first = true;
+            for seg in wrap_hard(&plain, INNER - FIELD_LABEL - 1) {
+                let seg_w = seg.chars().count();
+                lines.push(if first {
+                    field(label, (seg, seg_w))
+                } else {
+                    (
+                        format!("{} {}", " ".repeat(FIELD_LABEL), seg),
+                        FIELD_LABEL + 1 + seg_w,
+                    )
+                });
+                first = false;
+            }
+        }
+    }
+    lines
+}
+
+/// Fixed width of a field label.
+pub const FIELD_LABEL: usize = 9;
+
+/// Split a token-free string (a path) into chunks of `width` chars.
+fn wrap_hard(s: &str, width: usize) -> Vec<String> {
+    let chars: Vec<char> = s.chars().collect();
+    chars
+        .chunks(width.max(1))
+        .map(|c| c.iter().collect())
+        .collect()
 }
 
 /// Greedy word-wrap to `width` columns.

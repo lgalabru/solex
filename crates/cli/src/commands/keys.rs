@@ -6,7 +6,7 @@ use solex_core::{
     keys::{self, Keypair},
 };
 
-use crate::{commands, components, style};
+use crate::{commands, components, components::boxed, style};
 
 #[derive(Subcommand, Debug)]
 pub enum KeysCommand {
@@ -53,22 +53,30 @@ impl KeysCommand {
 fn list(args: &KeysArgs) -> Result<()> {
     let project = commands::load_project(args.manifest.as_deref())?;
     let m = project.channels();
-    println!();
-    for name in m.names() {
-        let kp = project.channel_keypair(&name)?;
-        let status = if kp.is_file() {
-            style::dim(&kp.display().to_string())
-        } else {
-            style::dim("(no keypair on disk)")
-        };
-        println!(
-            "{}",
-            components::fields(&[(
-                &name,
-                format!("{}  {}", m.program_id(&name).unwrap_or("(unset)"), status)
-            )])
-        );
-    }
+    let sections: Vec<Vec<boxed::Line>> = m
+        .names()
+        .iter()
+        .map(|name| {
+            let kp = project.channel_keypair(name).unwrap_or_default();
+            let on_disk = if kp.is_file() {
+                components::rel(project.root(), &kp)
+            } else {
+                "none on disk (upgrades only)".into()
+            };
+            boxed::section(
+                &[boxed::styled(style::bold(&components::channel(name)), name)],
+                boxed::plain(""),
+                &[
+                    (
+                        "program",
+                        boxed::plain(m.program_id(name).unwrap_or("(unset)")),
+                    ),
+                    ("keypair", boxed::plain(on_disk)),
+                ],
+            )
+        })
+        .collect();
+    println!("{}", boxed::frame(&sections));
     Ok(())
 }
 
@@ -118,54 +126,59 @@ fn new(args: &NewArgs) -> Result<()> {
 fn check(args: &KeysArgs) -> Result<()> {
     let project = commands::load_project(args.manifest.as_deref())?;
     let m = project.channels();
-    let mut failures = 0;
+    let mut failures: Vec<String> = Vec::new();
+    let mut sections: Vec<Vec<boxed::Line>> = Vec::new();
     for name in m.names() {
-        let declared = m.program_id(&name)?;
-        if let Err(reason) = keys::validate_pubkey(declared) {
-            println!(
-                "{}",
-                components::fail(&format!(
-                    "{}  program_id `{declared}` is invalid: {reason}",
-                    components::channel(&name)
-                ))
-            );
-            failures += 1;
-            continue;
-        }
+        let declared = m.program_id(&name)?.to_string();
         let path = project.channel_keypair(&name)?;
-        if !path.is_file() {
-            println!(
-                "{}",
-                components::ok(&format!(
-                    "{}  {declared} {}",
-                    components::channel(&name),
-                    style::dim("(no keypair on disk; upgrades only)")
-                ))
-            );
-            continue;
-        }
-        let actual = keys::pubkey_of(&path)?;
-        if actual == declared {
-            println!(
-                "{}",
-                components::ok(&format!("{}  {declared}", components::channel(&name)))
-            );
-        } else {
-            println!(
-                "{}",
-                components::fail(&format!(
-                    "{}  keypair {} is for {actual}, manifest says {declared}",
-                    components::channel(&name),
-                    path.display()
-                ))
-            );
-            failures += 1;
-        }
+        let (status, detail) = match keys::validate_pubkey(&declared) {
+            Err(reason) => {
+                failures.push(format!(
+                    "{name}: program_id `{declared}` is invalid: {reason}"
+                ));
+                (style::fail(), format!("invalid program_id: {reason}"))
+            }
+            Ok(()) if !path.is_file() => (style::ok(), "no keypair on disk (upgrades only)".into()),
+            Ok(()) => {
+                let actual = keys::pubkey_of(&path)?;
+                if actual == declared {
+                    (style::ok(), components::rel(project.root(), &path))
+                } else {
+                    failures.push(format!(
+                        "{name}: keypair {} is for {actual}, manifest says {declared}",
+                        path.display()
+                    ));
+                    (
+                        style::fail(),
+                        format!(
+                            "keypair is for {}, manifest says {}",
+                            components::short(&actual),
+                            components::short(&declared)
+                        ),
+                    )
+                }
+            }
+        };
+        sections.push(boxed::section(
+            &[
+                boxed::styled(status, "x"),
+                boxed::styled(style::bold(&components::channel(&name)), &name),
+            ],
+            boxed::plain(""),
+            &[
+                ("program", boxed::plain(declared)),
+                ("keypair", boxed::plain(detail)),
+            ],
+        ));
     }
-    if failures > 0 {
-        return Err(CoreError::message(format!(
-            "{failures} channel(s) failed the check"
-        )));
+    println!("{}", boxed::frame(&sections));
+    if !failures.is_empty() {
+        components::print_notice(
+            components::NoticeLevel::Error,
+            &format!("{} channel(s) failed the check", failures.len()),
+            &failures.join("\n"),
+        );
+        return Err(CoreError::Reported { code: 1 });
     }
     Ok(())
 }

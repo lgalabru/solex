@@ -6,7 +6,7 @@ use solex_core::{
     build::{self, BuildOptions},
 };
 
-use crate::{commands, components, style};
+use crate::{commands, components, components::boxed, style};
 
 #[derive(Args, Debug, Default)]
 pub struct BuildCommand {
@@ -83,6 +83,7 @@ impl BuildCommand {
                 &body,
             );
         }
+        let mut sections: Vec<Vec<boxed::Line>> = Vec::new();
         for channel in &channels {
             // One build per cluster when overrides make the artifacts differ.
             let ch = project.channels().channel(channel)?;
@@ -104,7 +105,7 @@ impl BuildCommand {
                     continue;
                 }
                 if self.verbose {
-                    eprintln!("{}", components::tip(&build::display_command(&cmd)));
+                    eprintln!("{}", style::dim(&build::display_command(&cmd)));
                 }
                 let label = match &opts.cluster {
                     Some(c) if ch.has_overrides() => format!("{channel}/{c}"),
@@ -115,39 +116,44 @@ impl BuildCommand {
                 sp.finish_and_clear();
                 let out = result?;
                 let features = build::channel_features(&project, channel, &opts.features)?;
-                println!(
-                    "{}",
-                    components::ok(&format!(
-                        "{}{}  {}  {}  {}",
-                        match &opts.cluster {
-                            Some(c) if ch.has_overrides() => {
-                                format!(
-                                    "{}{}",
-                                    components::channel(channel),
-                                    style::dim(&format!("/{c}"))
-                                )
-                            }
-                            _ => components::channel(channel),
-                        },
-                        " ".repeat(10usize.saturating_sub(label.chars().count())),
-                        style::dim(&components::short(&out.program_id)),
-                        style::dim(&style::human_size(out.size)),
-                        style::dim(&style::human_duration(out.elapsed)),
-                    ))
+
+                let mut head = vec![boxed::styled(
+                    style::bold(&components::channel(channel)),
+                    channel,
+                )];
+                if let Some(c) = out.cluster.as_deref() {
+                    head.push(boxed::plain(c));
+                }
+                let size = format!(
+                    "{}  {}",
+                    style::human_size(out.size),
+                    style::human_duration(out.elapsed)
                 );
-                let fields = components::fields(&[
-                    (
-                        "features",
-                        features
-                            .iter()
-                            .map(|f| style::channel_color(channel, f))
-                            .collect::<Vec<_>>()
-                            .join(" "),
-                    ),
-                    ("artifact", out.so_path.display().to_string()),
-                ]);
-                println!("{fields}");
+                let right = boxed::styled(style::dim(&size), &size);
+                let features_line = features
+                    .iter()
+                    .map(|f| style::channel_color(channel, f))
+                    .collect::<Vec<_>>()
+                    .join("  ");
+                sections.push(boxed::section(
+                    &head,
+                    right,
+                    &[
+                        ("program", boxed::plain(components::short(&out.program_id))),
+                        (
+                            "features",
+                            boxed::styled(features_line, &features.join("  ")),
+                        ),
+                        (
+                            "artifact",
+                            boxed::plain(components::rel(project.root(), &out.so_path)),
+                        ),
+                    ],
+                ));
             }
+        }
+        if !sections.is_empty() {
+            println!("{}", boxed::frame(&sections));
         }
         Ok(())
     }

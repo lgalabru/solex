@@ -6,7 +6,7 @@ use solex_core::{
     deploy::{self, DeployOptions},
 };
 
-use crate::{commands, components, style};
+use crate::{commands, components, components::boxed, style};
 
 #[derive(Args, Debug, Default)]
 pub struct DeployCommand {
@@ -76,19 +76,32 @@ impl DeployCommand {
             }
             println!(
                 "{}",
-                components::fields(&[
-                    ("channel", components::channel(&plan.channel)),
-                    ("program", components::short(&plan.program_id)),
-                    ("cluster", target.to_string()),
-                    ("artifact", plan.so_path.display().to_string()),
-                    (
-                        "authority",
-                        plan.upgrade_authority
-                            .as_ref()
-                            .map(|p| p.display().to_string())
-                            .unwrap_or_default(),
-                    ),
-                ])
+                boxed::frame(&[boxed::section(
+                    &[
+                        boxed::styled(
+                            style::bold(&components::channel(&plan.channel)),
+                            &plan.channel
+                        ),
+                        boxed::plain(target),
+                    ],
+                    boxed::plain(""),
+                    &[
+                        ("program", boxed::plain(components::short(&plan.program_id))),
+                        (
+                            "artifact",
+                            boxed::plain(components::rel(project.root(), &plan.so_path)),
+                        ),
+                        (
+                            "authority",
+                            boxed::plain(
+                                plan.upgrade_authority
+                                    .as_ref()
+                                    .map(|p| p.display().to_string())
+                                    .unwrap_or_default(),
+                            ),
+                        ),
+                    ],
+                )])
             );
             let sp = style::spinner(&format!("Deploying to {target}..."));
             let r = deploy::deploy(&plan, self.verbose);
