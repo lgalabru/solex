@@ -145,6 +145,7 @@ impl SolexMcp {
                 name.clone(),
                 serde_json::json!({
                     "program_id": ch.program_id,
+                    "deployable": ch.is_deployable(),
                     "cluster": ch.cluster,
                     "includes": ch.includes,
                     "vars": ch.vars,

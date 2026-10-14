@@ -33,9 +33,10 @@ cluster = "localnet"
 vars = { treasury_owner = "DoWeHaveAPlaceholder1111111111111111111111" }
 ```
 
-Fields per channel: `program_id` (required to build), `cluster` (moniker or
-RPC URL), `keypair` (first deploy only), `upgrade_authority`, `includes`,
-`vars`, `description`.
+Fields per channel: `program_id` (required to build; a channel without one is
+tag-only and exists for others to `include`), `cluster` (moniker or RPC URL,
+or a list for identical deployments), `keypair` (first deploy only),
+`upgrade_authority`, `includes`, `vars`, `description`.
 
 ## Embedded in a host manifest
 

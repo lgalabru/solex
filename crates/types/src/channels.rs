@@ -83,6 +83,23 @@ impl<'de> Deserialize<'de> for Clusters {
 
 /// One release channel: a deployment target plus the set of feature tags it
 /// ships.
+///
+/// A channel with no `program_id` is *tag-only*: it names a set of features
+/// for other channels to `include` and is never built or deployed. Use one
+/// when the same surface ships to several deployments that differ in
+/// `program_id` or `vars`:
+///
+/// ```toml
+/// [channels.stable]            # tag only
+/// [channels.mainnet]
+/// includes = ["stable"]
+/// program_id = "..."
+/// vars = { treasury = "..." }
+/// [channels.testnet]
+/// includes = ["stable"]
+/// program_id = "..."
+/// vars = { treasury = "..." }
+/// ```
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Channel {
@@ -108,6 +125,7 @@ pub struct Channel {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Per-channel constants read by `solex::var!("name")` at compile time:
+    /// (see [`Channel::is_deployable`] for channels that only name a tag set)
     /// treasury owners, fee accounts, admin keys, anything that differs per
     /// deployment. Missing a var on the active channel is a compile error, so
     /// placeholders cannot leak into a real deployment.
@@ -174,6 +192,15 @@ impl Channels {
 
     pub fn names(&self) -> Vec<String> {
         self.channels.keys().cloned().collect()
+    }
+
+    /// Channels with a `program_id`, the ones `--all` builds and deploys.
+    pub fn deployable_names(&self) -> Vec<String> {
+        self.channels
+            .iter()
+            .filter(|(_, c)| c.is_deployable())
+            .map(|(n, _)| n.clone())
+            .collect()
     }
 
     pub fn channel(&self, name: &str) -> Result<&Channel> {
@@ -254,6 +281,14 @@ impl Channels {
         Err(Error::NoDefault {
             defined: self.names(),
         })
+    }
+}
+
+impl Channel {
+    /// Whether this channel is something to build and deploy, as opposed to a
+    /// tag-only channel that exists for others to include.
+    pub fn is_deployable(&self) -> bool {
+        self.program_id.is_some()
     }
 }
 
@@ -339,6 +374,25 @@ mod tests {
         let mut c = sample();
         c.channels.insert("Bad".into(), Channel::default());
         assert!(matches!(c.validate(), Err(Error::InvalidChannelName(_))));
+    }
+
+    #[test]
+    fn tag_only_channels_are_not_deployable() {
+        let mut c = sample();
+        c.channels.insert("tagonly".into(), Channel::default());
+        c.channels
+            .get_mut("canary")
+            .unwrap()
+            .includes
+            .push("tagonly".into());
+        c.validate().unwrap();
+        assert!(!c.channel("tagonly").unwrap().is_deployable());
+        assert_eq!(c.deployable_names(), ["stable", "nightly", "canary"]);
+        assert!(c.ships("canary", "tagonly").unwrap());
+        assert!(matches!(
+            c.program_id("tagonly"),
+            Err(Error::MissingProgramId(_))
+        ));
     }
 
     #[test]

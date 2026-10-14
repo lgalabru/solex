@@ -193,6 +193,28 @@ const TREASURY_OWNER: [u8; 32] = decode_pubkey(solex::var!("treasury_owner"));
 
 A channel without the var fails to compile, so a placeholder can never reach a real cluster.
 
+### One surface, several deployments
+
+`cluster` takes a list when the same artifact goes to several clusters unchanged. When deployments differ in `program_id` or `vars`, they are separate channels; a channel without `program_id` is a tag-only channel that names the shared surface and is never built:
+
+```toml
+[channels.stable]                 # tag only: what #[channel(stable)] means
+
+[channels.mainnet]
+includes = ["stable"]
+program_id = "CHNLxYvV…"
+cluster = ["mainnet-beta", "testnet"]   # identical bytes on both
+vars = { treasury_owner = "Cs2zdf…" }
+
+[channels.devnet]
+includes = ["stable"]
+program_id = "CHNLxBtX…"
+cluster = "devnet"
+vars = { treasury_owner = "4zTeC5…" }
+```
+
+`solex deploy --channel mainnet` deploys to both clusters; `--cluster testnet` picks one. `solex build --all` skips tag-only channels.
+
 ## Build pipelines
 
 Solex owns one thing at build time: the environment. The proc macros read the channel from `SOLEX_CHANNEL` (and the manifest from `SOLEX_MANIFEST`) at expansion time, so any pipeline that sets those two variables produces channel-gated output. `solex build` is a convenience over that:

@@ -23,10 +23,11 @@ pub fn load_project(manifest: Option<&std::path::Path>) -> Result<Project> {
     }
 }
 
-/// `--all` wins; otherwise one explicit or resolved channel.
+/// `--all` wins and means every deployable channel (tag-only channels have
+/// nothing to build); otherwise one explicit or resolved channel.
 pub fn select_channels(project: &Project, channel: Option<&str>, all: bool) -> Result<Vec<String>> {
     if all {
-        return Ok(project.channels().names());
+        return Ok(project.channels().deployable_names());
     }
     Ok(vec![project.channels().resolve(channel)?])
 }

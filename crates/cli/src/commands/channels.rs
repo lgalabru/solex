@@ -30,6 +30,7 @@ impl ChannelsCommand {
                     name.clone(),
                     serde_json::json!({
                         "program_id": ch.program_id,
+                        "deployable": ch.is_deployable(),
                         "cluster": ch.cluster,
                         "includes": ch.includes,
                         "vars": ch.vars,
@@ -55,12 +56,20 @@ impl ChannelsCommand {
             } else {
                 style::dim("○")
             };
-            println!("  {marker} {}", style::accent(name));
-            println!(
-                "      {:<10} {}",
-                style::dim("program"),
-                ch.program_id.as_deref().unwrap_or("(unset)")
-            );
+            if !ch.is_deployable() {
+                println!(
+                    "  {marker} {} {}",
+                    style::accent(name),
+                    style::dim("(tag only: included by other channels, never built)")
+                );
+            } else {
+                println!("  {marker} {}", style::accent(name));
+                println!(
+                    "      {:<10} {}",
+                    style::dim("program"),
+                    ch.program_id.as_deref().unwrap_or("(unset)")
+                );
+            }
             println!(
                 "      {:<10} {}",
                 style::dim("cluster"),
