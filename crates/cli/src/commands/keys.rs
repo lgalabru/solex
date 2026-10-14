@@ -20,7 +20,7 @@ pub enum KeysCommand {
 
 #[derive(Args, Debug, Default)]
 pub struct KeysArgs {
-    /// Path to Solex.yaml
+    /// Path to the manifest
     #[arg(long)]
     pub manifest: Option<PathBuf>,
 }
@@ -35,7 +35,7 @@ pub struct NewArgs {
     #[arg(long)]
     pub force: bool,
 
-    /// Path to Solex.yaml
+    /// Path to the manifest
     #[arg(long)]
     pub manifest: Option<PathBuf>,
 }
@@ -52,9 +52,9 @@ impl KeysCommand {
 
 fn list(args: &KeysArgs) -> Result<()> {
     let project = commands::load_project(args.manifest.as_deref())?;
-    let m = project.manifest();
+    let m = project.channels();
     println!();
-    for name in m.channel_names() {
+    for name in m.names() {
         let kp = project.channel_keypair(&name)?;
         let status = if kp.is_file() {
             style::dim(&kp.display().to_string())
@@ -74,7 +74,7 @@ fn list(args: &KeysArgs) -> Result<()> {
 
 fn new(args: &NewArgs) -> Result<()> {
     let mut project = commands::load_project(args.manifest.as_deref())?;
-    project.manifest().channel(&args.channel)?;
+    project.channels().channel(&args.channel)?;
     let path = project.channel_keypair(&args.channel)?;
     if path.exists() && !args.force {
         return Err(CoreError::message(format!(
@@ -96,6 +96,7 @@ fn new(args: &NewArgs) -> Result<()> {
         .loaded
         .manifest
         .channels
+        .channels
         .get_mut(&args.channel)
         .expect("channel validated above");
     ch.program_id = Some(id.clone());
@@ -114,9 +115,9 @@ fn new(args: &NewArgs) -> Result<()> {
 
 fn check(args: &KeysArgs) -> Result<()> {
     let project = commands::load_project(args.manifest.as_deref())?;
-    let m = project.manifest();
+    let m = project.channels();
     let mut failures = 0;
-    for name in m.channel_names() {
+    for name in m.names() {
         let declared = m.program_id(&name)?;
         if let Err(reason) = keys::validate_pubkey(declared) {
             println!(

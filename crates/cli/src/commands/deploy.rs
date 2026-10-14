@@ -38,7 +38,7 @@ pub struct DeployCommand {
     #[arg(long, short)]
     pub verbose: bool,
 
-    /// Path to Solex.yaml
+    /// Path to the manifest (Solex.toml, Solex.yaml, or a host manifest with a [solex] section)
     #[arg(long)]
     pub manifest: Option<PathBuf>,
 }
@@ -46,9 +46,7 @@ pub struct DeployCommand {
 impl DeployCommand {
     pub fn execute(&self) -> Result<()> {
         let project = commands::load_project(self.manifest.as_deref())?;
-        let channel = project
-            .manifest()
-            .resolve_channel(self.channel.as_deref())?;
+        let channel = project.channels().resolve(self.channel.as_deref())?;
 
         if self.build {
             let opts = build::BuildOptions {

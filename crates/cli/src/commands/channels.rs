@@ -11,7 +11,7 @@ pub struct ChannelsCommand {
     #[arg(long)]
     pub json: bool,
 
-    /// Path to Solex.yaml
+    /// Path to the manifest
     #[arg(long)]
     pub manifest: Option<PathBuf>,
 }
@@ -19,8 +19,8 @@ pub struct ChannelsCommand {
 impl ChannelsCommand {
     pub fn execute(&self) -> Result<()> {
         let project = commands::load_project(self.manifest.as_deref())?;
-        let m = project.manifest();
-        let active = m.resolve_channel(None).ok();
+        let m = project.channels();
+        let active = m.resolve(None).ok();
 
         if self.json {
             let mut out = serde_json::Map::new();
@@ -44,7 +44,7 @@ impl ChannelsCommand {
         println!();
         println!(
             "  {} {}",
-            style::bold(&m.name),
+            style::bold(&project.name()),
             style::dim(&project.manifest_path().display().to_string())
         );
         println!();

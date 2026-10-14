@@ -7,7 +7,7 @@ use crate::commands;
 
 #[derive(Args, Debug, Default)]
 pub struct ChannelCommand {
-    /// Path to Solex.yaml
+    /// Path to the manifest
     #[arg(long)]
     pub manifest: Option<PathBuf>,
 }
@@ -15,7 +15,7 @@ pub struct ChannelCommand {
 impl ChannelCommand {
     pub fn execute(&self) -> Result<()> {
         let project = commands::load_project(self.manifest.as_deref())?;
-        println!("{}", project.manifest().resolve_channel(None)?);
+        println!("{}", project.channels().resolve(None)?);
         Ok(())
     }
 }

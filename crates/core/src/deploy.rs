@@ -53,9 +53,9 @@ impl DeployPlan {
 
 /// Validate everything needed for a deploy without touching the network.
 pub fn plan(project: &Project, channel: &str, opts: &DeployOptions) -> Result<DeployPlan> {
-    let manifest = project.manifest();
-    let ch = manifest.channel(channel)?;
-    let program_id = manifest.program_id(channel)?.to_string();
+    let channels = project.channels();
+    let ch = channels.channel(channel)?;
+    let program_id = channels.program_id(channel)?.to_string();
     keys::validate_pubkey(&program_id).map_err(|reason| {
         CoreError::message(format!(
             "channel `{channel}` has an invalid program_id `{program_id}`: {reason}"

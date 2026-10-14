@@ -4,10 +4,10 @@
 use std::{collections::BTreeSet, path::PathBuf};
 
 use proc_macro2::Span;
-use solex_manifest::{CHANNEL_ENV, LoadedManifest, MANIFEST_FILE};
+use solex_types::{CHANNEL_ENV, Loaded, MANIFEST_ENV};
 
 pub struct BuildContext {
-    pub loaded: LoadedManifest,
+    pub loaded: Loaded,
     pub channel: String,
     pub tags: BTreeSet<String>,
 }
@@ -19,23 +19,24 @@ impl BuildContext {
         let start = std::env::var_os("CARGO_MANIFEST_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("."));
-        let loaded = solex_manifest::discover(&start).map_err(|e| {
+        let loaded = solex_types::discover(&start).map_err(|e| {
             syn::Error::new(
                 span,
                 format!(
-                    "solex: {e}\n\nSolex macros read {MANIFEST_FILE} at compile time. Create one \
-                     with `solex init` or set SOLEX_MANIFEST to its path."
+                    "solex: {e}\n\nSolex macros read the channel configuration at compile time. \
+                     Create one with `solex init`, add a [solex] section to Anchor.toml, or set \
+                     {MANIFEST_ENV} to its path."
                 ),
             )
         })?;
-        let channel = loaded.manifest.resolve_channel(None).map_err(|e| {
+        let channel = loaded.channels().resolve(None).map_err(|e| {
             syn::Error::new(
                 span,
                 format!("solex: {e}\n\nBuild with `solex build --channel <name>` or export {CHANNEL_ENV}."),
             )
         })?;
         let tags = loaded
-            .manifest
+            .channels()
             .tags(&channel)
             .map_err(|e| syn::Error::new(span, format!("solex: {e}")))?;
         Ok(Self {
@@ -48,7 +49,7 @@ impl BuildContext {
     pub fn program_id(&self, span: Span) -> syn::Result<String> {
         let id = self
             .loaded
-            .manifest
+            .channels()
             .program_id(&self.channel)
             .map_err(|e| syn::Error::new(span, format!("solex: {e}")))?;
         validate_pubkey(id).map_err(|msg| {

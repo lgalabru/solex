@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use solex_manifest::{CHANNEL_ENV, MANIFEST_ENV};
+use solex_types::{CHANNEL_ENV, MANIFEST_ENV};
 
 use crate::{CoreError, Project, Result};
 
@@ -33,6 +33,20 @@ pub struct BuildOutput {
     pub elapsed: Duration,
 }
 
+/// Environment a build needs for the proc macros to resolve `channel`.
+///
+/// Framework CLIs with their own build pipeline apply these to their
+/// `cargo build-sbf` invocation instead of calling [`build`].
+pub fn channel_env(project: &Project, channel: &str) -> Vec<(&'static str, String)> {
+    vec![
+        (CHANNEL_ENV, channel.to_string()),
+        (
+            MANIFEST_ENV,
+            project.manifest_path().to_string_lossy().into_owned(),
+        ),
+    ]
+}
+
 /// The command that would run, for `--dry-run` and verbose output.
 pub fn build_command(project: &Project, channel: &str, opts: &BuildOptions) -> Command {
     let out_dir = project.channel_out_dir(channel);
@@ -51,15 +65,13 @@ pub fn build_command(project: &Project, channel: &str, opts: &BuildOptions) -> C
     if !opts.features.is_empty() {
         cmd.args(["--features", &opts.features.join(",")]);
     }
-    cmd.env(CHANNEL_ENV, channel)
-        .env(MANIFEST_ENV, project.manifest_path())
+    cmd.envs(channel_env(project, channel))
         .current_dir(project.root());
     cmd
 }
 
 pub fn build(project: &Project, channel: &str, opts: &BuildOptions) -> Result<BuildOutput> {
-    let manifest = project.manifest();
-    let program_id = manifest.program_id(channel)?.to_string();
+    let program_id = project.channels().program_id(channel)?.to_string();
     let out_dir = project.channel_out_dir(channel);
     std::fs::create_dir_all(&out_dir).map_err(|e| CoreError::io("create", &out_dir, e))?;
 

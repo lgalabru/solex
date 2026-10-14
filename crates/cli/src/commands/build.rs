@@ -38,7 +38,7 @@ pub struct BuildCommand {
     #[arg(long)]
     pub dry_run: bool,
 
-    /// Path to Solex.yaml (default: search upward from the current directory)
+    /// Path to the manifest (default: search upward from the current directory)
     #[arg(long, global = true)]
     pub manifest: Option<PathBuf>,
 }

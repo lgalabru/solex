@@ -23,7 +23,7 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    /// Scaffold a new Solex project (Anchor program + Solex.yaml + channel keypairs)
+    /// Scaffold a new Solex project (Anchor program + manifest + channel keypairs)
     Init(commands::init::InitCommand),
     /// Compile the program for one channel (or all)
     Build(commands::build::BuildCommand),

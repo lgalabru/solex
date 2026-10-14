@@ -15,7 +15,7 @@ proc-macro = true
 workspace = true
 
 [dependencies]
-solex-manifest = { workspace = true }
+solex-types = { workspace = true, features = ["yaml", "toml", "spec"] }
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
 syn = { workspace = true }

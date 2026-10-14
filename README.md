@@ -18,9 +18,9 @@ Agents produce code faster than anyone can review a big release. Solex keeps eve
 
 ## 💡 Key Features
 
-### 📡 Channels in one YAML file
+### 📡 Channels in one config section
 
-`stable`, `nightly`, `canary`, or whatever your team calls them. Each channel lists its program id, cluster and keypair, and which other channels it includes.
+`stable`, `nightly`, `canary`, or whatever your team calls them. Each channel lists its program id, cluster and keypair, and which other channels it includes. Write it as `Solex.toml`, `Solex.yaml`, or a `[solex]` section inside `Anchor.toml` or `Quasar.toml`.
 
 ### ✂️ Gated code is removed at compile time
 
@@ -76,7 +76,7 @@ solex deploy --channel nightly
 
 | Command | Purpose |
 |---|---|
-| `solex init <name>` | scaffold a project; `--channels a,b,c`, `--cluster ch=cluster` |
+| `solex init <name>` | scaffold a project; `--channels a,b,c`, `--cluster ch=cluster`, `--format toml` |
 | `solex features [--json] [--check]` | item × channel matrix; `--check` fails on tags no channel defines |
 | `solex channels` | channels, program ids, clusters, resolved tag sets |
 | `solex build [--channel c \| --all]` | `cargo build-sbf` into `target/solex/<channel>/` |
@@ -119,6 +119,24 @@ channels:
     includes: [stable]        # nightly also ships every #[channel(stable)] item
 ```
 
+The same section can live in a host manifest instead of its own file. Solex looks for `Solex.toml` / `Solex.yaml` first, then for a `solex` key in `Anchor.toml` or `Quasar.toml`, walking up from the crate being built:
+
+```toml
+# Anchor.toml
+[solex]
+default_channel = "stable"
+program_path = "programs/counter"
+
+[solex.channels.stable]
+program_id = "2mwKUED1kXW5nGmpTrLGbdMBe9miMkstQjUJm9vEUsqH"
+cluster = "mainnet-beta"
+
+[solex.channels.nightly]
+program_id = "9rwsA9m17bLqtT1GZcjGZiWfzm4yXsu1p6w7AiAPKGMs"
+cluster = "devnet"
+includes = ["stable"]
+```
+
 | Attribute | Meaning |
 |---|---|
 | `#[channel(stable)]` | compiled into channels that ship `stable` |
@@ -130,18 +148,26 @@ The attribute works on functions, structs, impls and modules. Epoch gates apply 
 
 ## Frameworks
 
-`solex` defaults to Anchor: `#[solex::program]` applies channel gating, then hands the module to `#[anchor_lang::program]`. With `default-features = false, features = ["native"]` the same macros work on framework-free programs. Pinocchio support is planned.
+`solex-lang` defaults to Anchor: `#[solex::program]` applies channel gating, then hands the module to `#[anchor_lang::program]`. With `default-features = false, features = ["native"]` the same macros work on framework-free programs. Pinocchio support is planned.
+
+### For framework authors
+
+The crates are split so a framework CLI can offer channels without shelling out to `solex`:
+
+- **`solex-types`** is plain serde data. Deserialize the `solex` section of your own manifest into `solex_types::Channels` and you have tag resolution, `includes`, and `resolve()` for free. Features `yaml`, `toml` and `spec` are all optional.
+- **`solex-core`** takes that section through `Project::from_parts` and exposes `build::channel_env` (the environment your `cargo build-sbf` call needs so the proc macros resolve the channel), plus the scan, deploy and keypair logic.
+- The proc macros find the configuration by walking up from `CARGO_MANIFEST_DIR`, or read the file named by `SOLEX_MANIFEST`. A host manifest with a `solex` key is accepted as-is, so your users keep one config file.
 
 ## Architecture & How to Contribute
 
 | Crate | Purpose |
 |---|---|
-| `crates/manifest` | `Solex.yaml` model, channel resolution, `#[channel]` grammar |
+| `crates/types` | `solex-types`: the embeddable `solex` section, channel resolution, `#[channel]` grammar; YAML and TOML |
 | `crates/macros` | proc macros |
 | `crates/lang` | `solex-lang`, the crate programs depend on (`use solex::...`) |
-| `crates/core` | build, deploy, scan and scaffold logic |
+| `crates/core` | `solex-core`: build, deploy, scan and scaffold logic, reusable from other CLIs |
 | `crates/cli` | the `solex` binary (`cargo install solex`) |
-| `tests/native` | macro tests on a framework-free program, run once per channel |
+| `tests/native` | macro tests on a framework-free program with a `Solex.toml`, run once per channel |
 | `examples/counter` | the program `solex init` produces |
 
 ```console

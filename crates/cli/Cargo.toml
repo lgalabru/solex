@@ -17,7 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 solex-core = { workspace = true }
-solex-manifest = { workspace = true }
+solex-types = { workspace = true, features = ["yaml", "toml", "spec"] }
 clap = { workspace = true }
 clap_complete = { workspace = true }
 console = { workspace = true }

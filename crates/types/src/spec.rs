@@ -1,7 +1,7 @@
 //! Grammar of `#[channel(...)]` and the pure decision of whether an item ships.
 //!
-//! Shared by the proc macros (compile-time gating) and the CLI (`solex
-//! features` matrix) so both agree on what an attribute means.
+//! Shared by the proc macros (compile-time gating) and source scanners such as
+//! `solex features`, so both agree on what an attribute means.
 
 use std::collections::BTreeSet;
 

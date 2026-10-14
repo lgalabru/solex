@@ -14,14 +14,14 @@ pub mod scaffold;
 pub mod scan;
 
 pub use project::Project;
-pub use solex_manifest::{self as manifest, Channel, Manifest};
+pub use solex_types::{self as types, Channel, Channels, Manifest};
 
 pub type Result<T> = std::result::Result<T, CoreError>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
     #[error(transparent)]
-    Manifest(#[from] solex_manifest::ManifestError),
+    Types(#[from] solex_types::Error),
     #[error("failed to {action} {}: {source}", path.display())]
     Io {
         action: &'static str,

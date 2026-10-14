@@ -7,7 +7,7 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use solex_manifest::{Channel, MANIFEST_FILE, Manifest, is_valid_channel_name};
+use solex_types::{Channel, Channels, Format, Manifest, is_valid_channel_name};
 
 use crate::{CoreError, Result, keys::Keypair};
 
@@ -20,6 +20,8 @@ pub struct InitOptions {
     /// Cluster per channel; falls back to `localnet`.
     pub clusters: BTreeMap<String, String>,
     pub solex_version: String,
+    /// `Solex.yaml` or `Solex.toml`.
+    pub format: Format,
 }
 
 impl InitOptions {
@@ -98,25 +100,36 @@ pub fn init(parent: &Path, opts: &InitOptions) -> Result<Created> {
         );
     }
     let manifest = Manifest {
-        name: opts.name.clone(),
-        default_channel: Some(opts.channels[0].clone()),
+        name: Some(opts.name.clone()),
         program_path: None,
-        channels,
+        channels: Channels {
+            default_channel: Some(opts.channels[0].clone()),
+            channels,
+        },
     };
     manifest.validate()?;
+    let manifest_file = match opts.format {
+        Format::Toml => "Solex.toml",
+        Format::Yaml => "Solex.yaml",
+    };
 
     let module = opts.name.replace('-', "_");
     let first = &opts.channels[0];
     let second = opts.channels.get(1).cloned();
 
-    write(&root, &mut files, MANIFEST_FILE, &manifest_yaml(&manifest))?;
+    write(
+        &root,
+        &mut files,
+        manifest_file,
+        &manifest_text(&manifest, opts.format)?,
+    )?;
     write(
         &root,
         &mut files,
         "Cargo.toml",
         &cargo_toml(&opts.name, &module, &opts.solex_version),
     )?;
-    write(&root, &mut files, "build.rs", BUILD_RS)?;
+    write(&root, &mut files, "build.rs", &build_rs(manifest_file))?;
     write(
         &root,
         &mut files,
@@ -148,13 +161,13 @@ fn write(root: &Path, files: &mut Vec<PathBuf>, rel: &str, contents: &str) -> Re
     Ok(())
 }
 
-fn manifest_yaml(m: &Manifest) -> String {
-    format!(
+fn manifest_text(m: &Manifest, format: Format) -> Result<String> {
+    Ok(format!(
         "# Solex release channels. Each channel is a separate deployment with its own\n\
          # program id; `includes` lists channels whose #[channel] tags also ship here.\n\
          # Docs: https://github.com/lgalabru/solex\n{}",
-        m.to_yaml()
-    )
+        solex_types::to_string(m, format)?
+    ))
 }
 
 fn cargo_toml(name: &str, module: &str, solex_version: &str) -> String {
@@ -197,13 +210,17 @@ check-cfg = [
     )
 }
 
-const BUILD_RS: &str = r#"fn main() {
+fn build_rs(manifest_file: &str) -> String {
+    format!(
+        r#"fn main() {{
     // Solex macros read the channel at expansion time; rebuild when it changes.
     println!("cargo:rerun-if-env-changed=SOLEX_CHANNEL");
     println!("cargo:rerun-if-env-changed=SOLEX_MANIFEST");
-    println!("cargo:rerun-if-changed=Solex.yaml");
+    println!("cargo:rerun-if-changed={manifest_file}");
+}}
+"#
+    )
 }
-"#;
 
 fn lib_rs(module: &str, first: &str, second: Option<&str>) -> String {
     let nightly_block = match second {
@@ -297,10 +314,13 @@ mod tests {
             channels: vec!["stable".into(), "nightly".into()],
             clusters: BTreeMap::from([("stable".into(), "mainnet-beta".into())]),
             solex_version: "0.1".into(),
+            format: Format::Toml,
         };
         let created = init(dir.path(), &opts).unwrap();
-        let loaded = solex_manifest::load(&created.root.join(MANIFEST_FILE)).unwrap();
-        let m = &loaded.manifest;
+        let loaded = solex_types::load(&created.root.join("Solex.toml")).unwrap();
+        let m = loaded.channels();
+        let build_rs = std::fs::read_to_string(created.root.join("build.rs")).unwrap();
+        assert!(build_rs.contains("rerun-if-changed=Solex.toml"));
         assert_eq!(m.default_channel.as_deref(), Some("stable"));
         assert_eq!(m.channels["nightly"].includes, ["stable"]);
         assert_eq!(
@@ -329,6 +349,7 @@ mod tests {
             channels: vec!["stable".into()],
             clusters: BTreeMap::new(),
             solex_version: "0.1".into(),
+            format: Format::Yaml,
         };
         std::fs::create_dir(dir.path().join("x")).unwrap();
         assert!(init(dir.path(), &opts).is_err());

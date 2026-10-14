@@ -1,10 +1,7 @@
 use std::{path::PathBuf, process::Command};
 
 use clap::Args;
-use solex_core::{
-    Result, build,
-    manifest::{CHANNEL_ENV, MANIFEST_ENV},
-};
+use solex_core::{Result, build};
 
 use crate::{commands, style};
 
@@ -18,7 +15,7 @@ pub struct TestCommand {
     #[arg(long, conflicts_with = "channel")]
     pub all: bool,
 
-    /// Path to Solex.yaml
+    /// Path to the manifest
     #[arg(long)]
     pub manifest: Option<PathBuf>,
 
@@ -38,8 +35,7 @@ impl TestCommand {
                 .arg("--manifest-path")
                 .arg(project.program_manifest())
                 .args(&self.args)
-                .env(CHANNEL_ENV, channel)
-                .env(MANIFEST_ENV, project.manifest_path())
+                .envs(build::channel_env(&project, channel))
                 .current_dir(project.root());
             build::run(&mut cmd, "cargo test", true)?;
         }

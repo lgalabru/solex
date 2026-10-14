@@ -3,5 +3,5 @@ fn main() {
     // re-expand them when it changes.
     println!("cargo:rerun-if-env-changed=SOLEX_CHANNEL");
     println!("cargo:rerun-if-env-changed=SOLEX_MANIFEST");
-    println!("cargo:rerun-if-changed=Solex.yaml");
+    println!("cargo:rerun-if-changed=Solex.toml");
 }

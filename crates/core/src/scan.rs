@@ -7,8 +7,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use solex_manifest::{
-    Manifest,
+use solex_types::{
+    Channels,
     spec::{Decision, FeatureSpec, decide},
 };
 use syn::{Attribute, Meta, spanned::Spanned, visit::Visit};
@@ -29,8 +29,8 @@ pub struct GatedItem {
 }
 
 impl GatedItem {
-    pub fn decision(&self, manifest: &Manifest, channel: &str) -> Result<Decision> {
-        let tags = manifest.tags(channel)?;
+    pub fn decision(&self, channels: &Channels, channel: &str) -> Result<Decision> {
+        let tags = channels.tags(channel)?;
         Ok(decide(&self.spec, &tags))
     }
 }
@@ -200,10 +200,10 @@ pub struct Matrix {
     pub rows: Vec<(GatedItem, Vec<Cell>)>,
 }
 
-pub fn matrix(manifest: &Manifest, items: Vec<GatedItem>, channels: &[String]) -> Result<Matrix> {
+pub fn matrix(config: &Channels, items: Vec<GatedItem>, channels: &[String]) -> Result<Matrix> {
     let mut tag_sets = BTreeMap::new();
     for ch in channels {
-        tag_sets.insert(ch.clone(), manifest.tags(ch)?);
+        tag_sets.insert(ch.clone(), config.tags(ch)?);
     }
     let rows = items
         .into_iter()
@@ -223,11 +223,11 @@ pub fn matrix(manifest: &Manifest, items: Vec<GatedItem>, channels: &[String]) -
 
 /// Tags referenced by attributes that no channel defines: almost always a typo,
 /// and such an item would never ship anywhere.
-pub fn unknown_tags(manifest: &Manifest, items: &[GatedItem]) -> Vec<(String, GatedItem)> {
+pub fn unknown_tags(config: &Channels, items: &[GatedItem]) -> Vec<(String, GatedItem)> {
     let mut out = Vec::new();
     for item in items {
         for entry in &item.spec.entries {
-            if !manifest.channels.contains_key(&entry.tag) {
+            if !config.channels.contains_key(&entry.tag) {
                 out.push((entry.tag.clone(), item.clone()));
             }
         }
@@ -260,18 +260,18 @@ mod tests {
         }
     "#;
 
-    fn manifest() -> Manifest {
-        Manifest::parse(
-            r#"
+    fn manifest() -> Channels {
+        let yaml = r#"
 name: t
 channels:
   stable: { program_id: "1" }
   nightly: { includes: [stable], program_id: "1" }
   canary: { includes: [nightly], program_id: "1" }
-"#,
-            Path::new("Solex.yaml"),
-        )
-        .unwrap()
+"#;
+        solex_types::parse(yaml, Path::new("Solex.yaml"), solex_types::Format::Yaml)
+            .unwrap()
+            .0
+            .channels
     }
 
     #[test]
@@ -301,7 +301,7 @@ channels:
         std::fs::write(&file, SRC).unwrap();
         let items = scan_file(&file, dir.path()).unwrap();
         let m = manifest();
-        let channels = m.channel_names();
+        let channels = m.names();
         let mx = matrix(&m, items, &channels).unwrap();
         // channels keep declaration order: stable, nightly, canary
         let b = mx.rows.iter().find(|(i, _)| i.name == "b").unwrap();

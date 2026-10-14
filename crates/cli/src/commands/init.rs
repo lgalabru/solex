@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
-use clap::Args;
-use solex_core::{CoreError, Result, scaffold};
+use clap::{Args, ValueEnum};
+use solex_core::{CoreError, Result, scaffold, types::Format};
 
 use crate::style;
 
@@ -23,6 +23,25 @@ pub struct InitCommand {
     /// Directory to create the project in (default: current directory)
     #[arg(long, default_value = ".")]
     pub path: PathBuf,
+
+    /// Manifest format
+    #[arg(long, value_enum, default_value_t = ManifestFormat::Yaml)]
+    pub format: ManifestFormat,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug)]
+pub enum ManifestFormat {
+    Yaml,
+    Toml,
+}
+
+impl From<ManifestFormat> for Format {
+    fn from(f: ManifestFormat) -> Self {
+        match f {
+            ManifestFormat::Yaml => Format::Yaml,
+            ManifestFormat::Toml => Format::Toml,
+        }
+    }
 }
 
 impl InitCommand {
@@ -48,6 +67,7 @@ impl InitCommand {
             channels: self.channels.clone(),
             clusters,
             solex_version: env!("CARGO_PKG_VERSION").to_string(),
+            format: self.format.into(),
         };
         let created = scaffold::init(&self.path, &opts)?;
 

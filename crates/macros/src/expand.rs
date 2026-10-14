@@ -6,7 +6,7 @@ use syn::{
     Attribute, ImplItem, Item, ItemMod, LitStr, Meta, parse_quote_spanned, spanned::Spanned,
 };
 
-use solex_manifest::spec::{Decision, FeatureSpec, decide};
+use solex_types::spec::{Decision, FeatureSpec, decide};
 
 use crate::context::BuildContext;
 

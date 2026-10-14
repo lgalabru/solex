@@ -13,9 +13,7 @@ use solex_core::{CoreError, Project, Result};
 /// Load the project from the current directory, or from `--manifest` when given.
 pub fn load_project(manifest: Option<&std::path::Path>) -> Result<Project> {
     match manifest {
-        Some(p) => Ok(Project {
-            loaded: solex_core::manifest::load(p)?,
-        }),
+        Some(p) => Project::load(p),
         None => Project::discover_cwd(),
     }
 }
@@ -23,14 +21,14 @@ pub fn load_project(manifest: Option<&std::path::Path>) -> Result<Project> {
 /// `--all` wins; otherwise one explicit or resolved channel.
 pub fn select_channels(project: &Project, channel: Option<&str>, all: bool) -> Result<Vec<String>> {
     if all {
-        return Ok(project.manifest().channel_names());
+        return Ok(project.channels().names());
     }
-    Ok(vec![project.manifest().resolve_channel(channel)?])
+    Ok(vec![project.channels().resolve(channel)?])
 }
 
 pub fn ensure_nonempty_channels(v: &[String]) -> Result<()> {
     if v.is_empty() {
-        return Err(CoreError::message("no channels defined in Solex.yaml"));
+        return Err(CoreError::message("no channels defined"));
     }
     Ok(())
 }

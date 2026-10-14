@@ -22,7 +22,7 @@ pub struct FeaturesCommand {
     #[arg(long)]
     pub check: bool,
 
-    /// Path to Solex.yaml
+    /// Path to the manifest
     #[arg(long)]
     pub manifest: Option<PathBuf>,
 }
@@ -30,13 +30,13 @@ pub struct FeaturesCommand {
 impl FeaturesCommand {
     pub fn execute(&self) -> Result<()> {
         let project = commands::load_project(self.manifest.as_deref())?;
-        let m = project.manifest();
+        let m = project.channels();
         let channels = match &self.channel {
             Some(c) => {
                 m.channel(c)?;
                 vec![c.clone()]
             }
-            None => m.channel_names(),
+            None => m.names(),
         };
         let items = scan::scan_program(&project.program_dir())?;
         let unknown = scan::unknown_tags(m, &items);

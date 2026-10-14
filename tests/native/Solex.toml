@@ -1,0 +1,18 @@
+# Fixture manifest for the native tests, in TOML to exercise that path
+# (the example uses YAML). `just test-native` runs the suite once per channel.
+name = "solex-native-tests"
+default_channel = "stable"
+
+[channels.stable]
+program_id = "11111111111111111111111111111111"
+cluster = "localnet"
+
+[channels.nightly]
+includes = ["stable"]
+program_id = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+cluster = "localnet"
+
+[channels.canary]
+includes = ["nightly"]
+program_id = "Sysvar1111111111111111111111111111111111111"
+cluster = "localnet"

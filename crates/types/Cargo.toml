@@ -1,0 +1,36 @@
+[package]
+name = "solex-types"
+description = "Release-channel types for Solex: the embeddable `solex` config section, channel resolution, and the #[channel] grammar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["yaml", "toml", "spec"]
+# Parse `Solex.yaml` and YAML documents with a `solex` key.
+yaml = ["dep:serde_yaml"]
+# Parse `Solex.toml` and TOML documents with a `solex` key (Anchor.toml, Quasar.toml, ...).
+toml = ["dep:toml"]
+# The `#[channel(...)]` attribute grammar (pulls in syn). Needed by the proc
+# macros and by source scanners; framework CLIs that only read the manifest
+# can turn it off.
+spec = ["dep:syn", "dep:proc-macro2"]
+
+[dependencies]
+serde = { workspace = true }
+indexmap = { workspace = true }
+thiserror = { workspace = true }
+serde_yaml = { workspace = true, optional = true }
+toml = { workspace = true, optional = true }
+syn = { workspace = true, optional = true }
+proc-macro2 = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+quote = { workspace = true }
