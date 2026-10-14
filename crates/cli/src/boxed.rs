@@ -36,12 +36,30 @@ pub fn plain(s: impl Into<String>) -> Line {
     (s, w)
 }
 
-/// Left part and right-aligned part on one line.
+/// Left part and right-aligned part on one line. When both do not fit, the
+/// right part (a location, typically) loses its beginning behind `…`; the
+/// right part must be plain text for that to work.
 pub fn split(left: Line, right: Line) -> Line {
-    let gap = INNER.saturating_sub(left.1 + right.1).max(2);
+    let (mut right_text, mut right_w) = right;
+    let room = INNER.saturating_sub(left.1 + 2);
+    if right_w > room {
+        let plain: String = console::strip_ansi_codes(&right_text).into_owned();
+        let keep = room.saturating_sub(1);
+        let tail: String = plain
+            .chars()
+            .rev()
+            .take(keep)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        right_text = style::dim(&format!("…{tail}"));
+        right_w = keep + 1;
+    }
+    let gap = INNER.saturating_sub(left.1 + right_w).max(2);
     (
-        format!("{}{}{}", left.0, " ".repeat(gap), right.0),
-        left.1 + gap + right.1,
+        format!("{}{}{}", left.0, " ".repeat(gap), right_text),
+        left.1 + gap + right_w,
     )
 }
 
