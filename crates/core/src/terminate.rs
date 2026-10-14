@@ -7,7 +7,7 @@ use crate::{CoreError, Project, Result, build, keys};
 
 #[derive(Debug, Clone, Default)]
 pub struct TerminateOptions {
-    /// Override the channel's cluster / RPC URL.
+    /// Pick one of the channel's clusters (required when several are declared).
     pub url: Option<String>,
     /// Upgrade authority (defaults to the channel's, then the Solana CLI default).
     pub authority: Option<PathBuf>,
@@ -61,7 +61,20 @@ pub fn plan(project: &Project, channel: &str, opts: &TerminateOptions) -> Result
             "channel `{channel}` has an invalid program_id `{program_id}`: {reason}"
         ))
     })?;
-    let cluster = opts.url.clone().or_else(|| ch.cluster.clone());
+    let cluster = match opts.url.clone() {
+        Some(u) => Some(ch.cluster.select(Some(&u))?.remove(0)),
+        None => match ch.cluster.single() {
+            Some(c) => Some(c.to_string()),
+            None if ch.cluster.is_empty() => None,
+            None => {
+                return Err(CoreError::message(format!(
+                    "channel `{channel}` deploys to several clusters ({}); pass --cluster to \
+                     choose which one to terminate",
+                    ch.cluster.0.join(", ")
+                )));
+            }
+        },
+    };
     let is_mainnet = cluster
         .as_deref()
         .is_some_and(|c| c.contains("mainnet") || c == "m");

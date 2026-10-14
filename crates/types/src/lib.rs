@@ -22,7 +22,7 @@ mod manifest;
 #[cfg(feature = "spec")]
 pub mod spec;
 
-pub use channels::{Channel, Channels, is_valid_channel_name};
+pub use channels::{Channel, Channels, Clusters, is_valid_channel_name};
 pub use manifest::{
     BuildConfig, CHANNEL_ENV, Format, HOST_FILES, Loaded, MANIFEST_ENV, MANIFEST_FILES, Manifest,
     SECTION_KEY, Source, discover, find, load, parse, to_string,
@@ -70,6 +70,11 @@ pub enum Error {
     NoDefault { defined: Vec<String> },
     #[error("channel `{0}` has no `program_id`")]
     MissingProgramId(String),
+    #[error("cluster `{cluster}` is not declared for this channel (declared: {})", declared.join(", "))]
+    UnknownCluster {
+        cluster: String,
+        declared: Vec<String>,
+    },
     #[error("invalid channel name `{0}`: use lowercase letters, digits, `-` or `_`")]
     InvalidChannelName(String),
 }

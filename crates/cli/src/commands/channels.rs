@@ -64,7 +64,11 @@ impl ChannelsCommand {
             println!(
                 "      {:<10} {}",
                 style::dim("cluster"),
-                ch.cluster.as_deref().unwrap_or("(solana CLI default)")
+                if ch.cluster.is_empty() {
+                    "(solana CLI default)".to_string()
+                } else {
+                    ch.cluster.0.join(", ")
+                }
             );
             let tags: Vec<_> = m.tags(name)?.into_iter().collect();
             println!("      {:<10} {}", style::dim("ships"), tags.join(", "));

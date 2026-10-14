@@ -7,7 +7,9 @@ use crate::{CoreError, Project, Result, build, keys};
 
 #[derive(Debug, Clone, Default)]
 pub struct DeployOptions {
-    /// Override the channel's cluster / RPC URL.
+    /// Pick one of the channel's clusters, or an RPC URL when the channel
+    /// declares none. With several declared and no choice, every cluster is
+    /// deployed to.
     pub url: Option<String>,
     /// Fee payer keypair (`solana program deploy --keypair`).
     pub payer: Option<PathBuf>,
@@ -51,8 +53,36 @@ impl DeployPlan {
     }
 }
 
+/// One plan per target cluster. A channel with `cluster = ["a", "b"]` yields
+/// two plans unless `opts.url` picks one.
+pub fn plans(project: &Project, channel: &str, opts: &DeployOptions) -> Result<Vec<DeployPlan>> {
+    let ch = project.channels().channel(channel)?;
+    let clusters = ch.cluster.select(opts.url.as_deref())?;
+    if clusters.is_empty() {
+        return Ok(vec![plan_for(project, channel, None, opts)?]);
+    }
+    clusters
+        .into_iter()
+        .map(|c| plan_for(project, channel, Some(c), opts))
+        .collect()
+}
+
 /// Validate everything needed for a deploy without touching the network.
 pub fn plan(project: &Project, channel: &str, opts: &DeployOptions) -> Result<DeployPlan> {
+    let ch = project.channels().channel(channel)?;
+    let cluster = match opts.url.clone() {
+        Some(u) => Some(ch.cluster.select(Some(&u))?.remove(0)),
+        None => ch.cluster.single().map(str::to_string),
+    };
+    plan_for(project, channel, cluster, opts)
+}
+
+fn plan_for(
+    project: &Project,
+    channel: &str,
+    cluster: Option<String>,
+    opts: &DeployOptions,
+) -> Result<DeployPlan> {
     let channels = project.channels();
     let ch = channels.channel(channel)?;
     let program_id = channels.program_id(channel)?.to_string();
@@ -92,7 +122,7 @@ pub fn plan(project: &Project, channel: &str, opts: &DeployOptions) -> Result<De
         channel: channel.to_string(),
         program_id,
         so_path,
-        cluster: opts.url.clone().or_else(|| ch.cluster.clone()),
+        cluster,
         program_keypair,
         upgrade_authority,
         payer: opts.payer.clone(),

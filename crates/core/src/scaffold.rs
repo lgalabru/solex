@@ -83,11 +83,11 @@ pub fn init(parent: &Path, opts: &InitOptions) -> Result<Created> {
             Channel {
                 program_id: Some(kp.pubkey()),
                 keypair: Some(rel),
-                cluster: Some(
+                cluster: solex_types::Clusters::from(
                     opts.clusters
                         .get(name)
-                        .cloned()
-                        .unwrap_or_else(|| "localnet".into()),
+                        .map(String::as_str)
+                        .unwrap_or("localnet"),
                 ),
                 upgrade_authority: None,
                 includes: if i == 0 {
@@ -325,11 +325,8 @@ mod tests {
         assert!(build_rs.contains("rerun-if-changed=Solex.toml"));
         assert_eq!(m.default_channel.as_deref(), Some("stable"));
         assert_eq!(m.channels["nightly"].includes, ["stable"]);
-        assert_eq!(
-            m.channels["stable"].cluster.as_deref(),
-            Some("mainnet-beta")
-        );
-        assert_eq!(m.channels["nightly"].cluster.as_deref(), Some("localnet"));
+        assert_eq!(m.channels["stable"].cluster.single(), Some("mainnet-beta"));
+        assert_eq!(m.channels["nightly"].cluster.single(), Some("localnet"));
         // keypair on disk matches the manifest program id
         for (ch, id) in &created.program_ids {
             let kp = crate::keys::pubkey_of(&created.root.join("keys").join(format!("{ch}.json")))

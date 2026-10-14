@@ -3,9 +3,83 @@
 use std::{collections::BTreeSet, path::PathBuf};
 
 use indexmap::IndexMap;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{Error, Result};
+
+/// One or more clusters a channel deploys to, written either as
+/// `cluster = "devnet"` or `cluster = ["mainnet-beta", "testnet"]`.
+///
+/// Several clusters mean the same artifact and program id are deployed to
+/// each of them; `solex deploy` iterates over them unless `--cluster` picks one.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Clusters(pub Vec<String>);
+
+impl Clusters {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(String::as_str)
+    }
+
+    /// The only cluster, when exactly one is declared.
+    pub fn single(&self) -> Option<&str> {
+        match self.0.as_slice() {
+            [one] => Some(one),
+            _ => None,
+        }
+    }
+
+    /// Validate a `--cluster` choice against the declared list. Any value is
+    /// accepted when nothing is declared (the manifest leaves it to the CLI).
+    pub fn select(&self, requested: Option<&str>) -> Result<Vec<String>> {
+        match requested {
+            Some(r) => {
+                if self.0.is_empty() || self.0.iter().any(|c| c == r) {
+                    Ok(vec![r.to_string()])
+                } else {
+                    Err(Error::UnknownCluster {
+                        cluster: r.to_string(),
+                        declared: self.0.clone(),
+                    })
+                }
+            }
+            None => Ok(self.0.clone()),
+        }
+    }
+}
+
+impl From<&str> for Clusters {
+    fn from(s: &str) -> Self {
+        Clusters(vec![s.to_string()])
+    }
+}
+
+impl Serialize for Clusters {
+    fn serialize<S: Serializer>(&self, s: S) -> std::result::Result<S::Ok, S::Error> {
+        match self.0.as_slice() {
+            [one] => s.serialize_str(one),
+            many => many.serialize(s),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Clusters {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum OneOrMany {
+            One(String),
+            Many(Vec<String>),
+        }
+        Ok(match OneOrMany::deserialize(d)? {
+            OneOrMany::One(s) => Clusters(vec![s]),
+            OneOrMany::Many(v) => Clusters(v),
+        })
+    }
+}
 
 /// One release channel: a deployment target plus the set of feature tags it
 /// ships.
@@ -18,10 +92,10 @@ pub struct Channel {
     /// Keypair file for `program_id`; required for the first deploy only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keypair: Option<PathBuf>,
-    /// Cluster moniker (`mainnet-beta`, `devnet`, `testnet`, `localnet`) or
-    /// RPC URL passed to the Solana CLI.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cluster: Option<String>,
+    /// Cluster moniker(s) (`mainnet-beta`, `devnet`, `testnet`, `localnet`) or
+    /// RPC URL(s) passed to the Solana CLI. A string or a list.
+    #[serde(default, skip_serializing_if = "Clusters::is_empty")]
+    pub cluster: Clusters,
     /// Upgrade authority keypair passed to `solana program deploy`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub upgrade_authority: Option<PathBuf>,
@@ -265,6 +339,28 @@ mod tests {
         let mut c = sample();
         c.channels.insert("Bad".into(), Channel::default());
         assert!(matches!(c.validate(), Err(Error::InvalidChannelName(_))));
+    }
+
+    #[test]
+    fn clusters_select_and_validate() {
+        let one = Clusters::from("devnet");
+        assert_eq!(one.single(), Some("devnet"));
+        assert_eq!(one.select(None).unwrap(), ["devnet"]);
+        let many = Clusters(vec!["mainnet-beta".into(), "testnet".into()]);
+        assert_eq!(many.single(), None);
+        assert_eq!(many.select(None).unwrap(), ["mainnet-beta", "testnet"]);
+        assert_eq!(many.select(Some("testnet")).unwrap(), ["testnet"]);
+        assert!(matches!(
+            many.select(Some("devnet")),
+            Err(Error::UnknownCluster { .. })
+        ));
+        // Nothing declared: the CLI's choice stands.
+        assert_eq!(
+            Clusters::default()
+                .select(Some("http://localhost:8899"))
+                .unwrap(),
+            ["http://localhost:8899"]
+        );
     }
 
     #[test]

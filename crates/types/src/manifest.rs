@@ -392,6 +392,36 @@ includes = ["stable"]
     }
 
     #[test]
+    fn cluster_accepts_string_or_list() {
+        let toml = r#"
+[channels.stable]
+program_id = "11111111111111111111111111111111"
+cluster = ["mainnet-beta", "testnet"]
+
+[channels.nightly]
+program_id = "22222222222222222222222222222222"
+cluster = "devnet"
+"#;
+        let (m, _) = parse(toml, Path::new("Solex.toml"), Format::Toml).unwrap();
+        let stable = m.channels.channel("stable").unwrap();
+        assert_eq!(stable.cluster.0, ["mainnet-beta", "testnet"]);
+        assert_eq!(
+            m.channels.channel("nightly").unwrap().cluster.single(),
+            Some("devnet")
+        );
+        // Round-trips in both formats; a single cluster stays a plain string.
+        for f in [Format::Toml, Format::Yaml] {
+            let out = to_string(&m, f).unwrap();
+            assert!(
+                out.contains("cluster = \"devnet\"") || out.contains("cluster: devnet"),
+                "{out}"
+            );
+            let (again, _) = parse(&out, Path::new("x"), f).unwrap();
+            assert_eq!(again, m, "{f:?}");
+        }
+    }
+
+    #[test]
     fn roundtrip_both_formats() {
         let (m, _) = parse(YAML, Path::new("Solex.yaml"), Format::Yaml).unwrap();
         for f in [Format::Yaml, Format::Toml] {

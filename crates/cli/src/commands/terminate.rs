@@ -28,8 +28,8 @@ pub struct TerminateCommand {
     #[arg(long)]
     pub authority: Option<PathBuf>,
 
-    /// Override the channel's cluster (moniker or RPC URL)
-    #[arg(long, short)]
+    /// Which of the channel's clusters (required when it declares several)
+    #[arg(long, short, visible_alias = "cluster")]
     pub url: Option<String>,
 
     /// Print the command without running it
