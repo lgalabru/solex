@@ -9,7 +9,7 @@ mod style;
 #[command(
     name = "solex",
     version,
-    about = "SOlana EXpress: ship program features per release channel",
+    about = "Release trains for Solana programs: ship features per channel",
     propagate_version = true
 )]
 struct Cli {

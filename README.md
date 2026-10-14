@@ -1,14 +1,24 @@
-# solex — SOlana EXpress
+# solex
 
-Ship one Solana program to several release channels.
+**Release trains for Solana programs.** *Nightly departures, stable arrivals.*
 
-Each channel in `Solex.yaml` is a separate deployment with its own program id,
-cluster and upgrade authority. Mark instructions, accounts or whole modules with
-`#[channel(stable)]`, `#[channel(nightly)]` or `#[channel([nightly, 850])]`,
-and `solex build --channel nightly` compiles exactly what that channel ships.
-(The attribute is `channel`, not `feature`: the latter collides with rustc's
-built-in `#![feature]`.)
-Nothing else makes it into the binary.
+Agents write code faster than anyone can review a big-bang release. Solex
+makes small releases the default for Solana programs. Declare release
+channels in `Solex.yaml`, tag each change with the channel it belongs to, and
+`solex build --channel nightly` compiles exactly what that channel ships. Code
+tagged for nightly is absent from the stable binary, so the mainnet artifact
+stays small, every upgrade is a reviewable diff, and an audit covers the change
+that actually shipped.
+
+- **One codebase, one deployment per channel.** `stable` on mainnet, `nightly`
+  on devnet, `canary` wherever you test, each with its own program id.
+- **Gated code is removed at compile time.** A nightly instruction has no
+  discriminator, no IDL entry and no bytes in the stable binary.
+- **Epoch gates ship code ahead of activation**, the way Solana's own feature
+  gates do. `#[channel([nightly, 850])]` compiles into nightly and returns an
+  error until epoch 850.
+- **`solex features` prints what ships where**, so the reviewer and the
+  auditor read the same table the compiler used.
 
 > **Status:** early. The macro and CLI surface described here works end to end
 > (Anchor 1.0, `cargo build-sbf`), but expect changes.
