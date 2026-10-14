@@ -425,6 +425,17 @@ pub fn unused_features(config: &Channels, items: &[GatedItem]) -> Vec<String> {
         .collect()
 }
 
+/// Environment variables the program's `build.rs` must declare with
+/// `cargo:rerun-if-env-changed`, or cargo reuses one channel's compilation
+/// for the next. Returns the missing ones; all three when there is no build.rs.
+pub fn untracked_env(program_dir: &Path) -> Vec<&'static str> {
+    const VARS: [&str; 3] = ["SOLEX_CHANNEL", "SOLEX_MANIFEST", "SOLEX_CLUSTER"];
+    let text = std::fs::read_to_string(program_dir.join("build.rs")).unwrap_or_default();
+    VARS.into_iter()
+        .filter(|v| !text.contains(&format!("rerun-if-env-changed={v}")))
+        .collect()
+}
+
 /// Features declared in the manifest but missing from the program's
 /// `Cargo.toml` `[features]`; a build with `--features` would fail.
 pub fn undeclared_in_cargo(config: &Channels, cargo_toml: &Path) -> Result<Vec<String>> {
@@ -574,6 +585,25 @@ epoch = { canary = 42 }
         assert_eq!(unknown.len(), 1);
         assert_eq!(unknown[0].0, "nightlyy");
         assert_eq!(unused_features(&m, &scan.items), ["hooks"]);
+    }
+
+    #[test]
+    fn detects_build_rs_not_tracking_solex_env() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            untracked_env(dir.path()).len(),
+            3,
+            "no build.rs: nothing tracked"
+        );
+        std::fs::write(
+            dir.path().join("build.rs"),
+            "fn main() { println!(\"cargo:rerun-if-env-changed=SOLEX_CHANNEL\"); }",
+        )
+        .unwrap();
+        assert_eq!(
+            untracked_env(dir.path()),
+            ["SOLEX_MANIFEST", "SOLEX_CLUSTER"]
+        );
     }
 
     #[test]

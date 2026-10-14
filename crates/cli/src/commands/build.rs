@@ -66,6 +66,22 @@ impl BuildCommand {
             cluster: None,
         };
 
+        let untracked = solex_core::scan::untracked_env(&project.program_dir());
+        if !untracked.is_empty() && !self.dry_run {
+            eprintln!(
+                "  {} {} does not declare rerun-if-env-changed for {}; cargo may reuse another \
+                 channel's compilation. Add to build.rs:",
+                style::warn(),
+                project.program_dir().join("build.rs").display(),
+                untracked.join(", ")
+            );
+            for v in &untracked {
+                eprintln!(
+                    "      {}",
+                    style::dim(&format!("println!(\"cargo:rerun-if-env-changed={v}\");"))
+                );
+            }
+        }
         for channel in &channels {
             // One build per cluster when overrides make the artifacts differ.
             let ch = project.channels().channel(channel)?;

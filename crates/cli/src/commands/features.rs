@@ -110,6 +110,16 @@ impl FeaturesCommand {
             );
             problems += 1;
         }
+        let untracked = scan::untracked_env(&project.program_dir());
+        if !untracked.is_empty() {
+            eprintln!(
+                "  {} build.rs does not declare rerun-if-env-changed for {}; cargo may reuse \
+                 another channel's compilation",
+                style::fail(),
+                untracked.join(", ")
+            );
+            problems += 1;
+        }
         if !unmanaged.is_empty() {
             eprintln!(
                 "  {} cargo features not managed by solex (never enabled by channel builds): {}",
