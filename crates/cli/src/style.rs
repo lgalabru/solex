@@ -72,12 +72,6 @@ pub fn human_duration(d: std::time::Duration) -> String {
     }
 }
 
-/// Left-align `s` to `width` visible columns, then apply `f`. Padding after
-/// styling would count escape codes as characters.
-pub fn pad_then(s: &str, width: usize, f: fn(&str) -> String) -> String {
-    f(&format!("{s:<width$}"))
-}
-
 /// One stable color per channel name, so a channel reads the same everywhere.
 /// Well-known names get fixed hues; anything else hashes into the palette.
 pub fn channel_color(channel: &str, label: &str) -> String {
