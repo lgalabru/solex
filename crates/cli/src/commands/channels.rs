@@ -21,6 +21,25 @@ impl ChannelsCommand {
         let project = commands::load_project(self.manifest.as_deref())?;
         let m = project.channels();
         let active = m.resolve(None).ok();
+        // Named features per channel, from the source scan. A project without
+        // sources yet (or with unparsable ones) simply shows none.
+        let items = solex_core::scan::scan_program(&project.program_dir()).unwrap_or_default();
+        let features_on = |channel: &str| -> Vec<String> {
+            let mut out: Vec<String> = Vec::new();
+            for item in &items {
+                let Some(f) = &item.feature else { continue };
+                if out.contains(f) {
+                    continue;
+                }
+                if matches!(
+                    item.decision(m, channel),
+                    Ok(solex_core::types::spec::Decision::Include { .. })
+                ) {
+                    out.push(f.clone());
+                }
+            }
+            out
+        };
 
         if self.json {
             let mut out = serde_json::Map::new();
@@ -33,10 +52,10 @@ impl ChannelsCommand {
                         "deployable": ch.is_deployable(),
                         "cluster": ch.cluster,
                         "includes": ch.includes,
-                        "features": ch.features,
                         "vars": ch.vars,
                         "overrides": ch.overrides,
                         "ships": tags,
+                        "features": features_on(name),
                         "default": active.as_deref() == Some(name.as_str()),
                     }),
                 );
@@ -85,15 +104,20 @@ impl ChannelsCommand {
                     ch.cluster.0.join(", ")
                 }
             );
-            if !ch.features.is_empty() {
+            let tags: Vec<_> = m.tags(name)?.into_iter().collect();
+            println!("      {:<10} {}", style::dim("ships"), tags.join(", "));
+            let feats = features_on(name);
+            if !feats.is_empty() {
                 println!(
                     "      {:<10} {}",
                     style::dim("features"),
-                    ch.features.join(", ")
+                    feats
+                        .iter()
+                        .map(|f| style::bold(f))
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 );
             }
-            let tags: Vec<_> = m.tags(name)?.into_iter().collect();
-            println!("      {:<10} {}", style::dim("ships"), tags.join(", "));
             for (k, v) in &ch.vars {
                 println!("      {:<10} {k} = {v}", style::dim("var"));
             }

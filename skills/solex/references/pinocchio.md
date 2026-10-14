@@ -14,7 +14,7 @@ pub const TREASURY_OWNER: [u8; 32] =
 #[repr(u8)]
 pub enum Instruction<'a> {
     Open(OpenArgs<'a>) = 1,
-    #[channel(devnet)]
+    #[channel(devnet, "hooks")]
     OpenWithHooks(OpenArgs<'a>) = 10,
 }
 
@@ -24,7 +24,7 @@ impl<'a> Instruction<'a> {
         let (disc, rest) = data.split_first().ok_or(ProgramError::InvalidInstructionData)?;
         match *disc {
             open::DISCRIMINATOR => Ok(Self::Open(OpenArgs::load(rest)?)),
-            #[channel(devnet)]
+            #[channel(devnet, "hooks")]
             open::WITH_HOOKS_DISCRIMINATOR => Ok(Self::OpenWithHooks(OpenArgs::load_with_hooks(rest)?)),
             _ => Err(ProgramError::InvalidInstructionData),
         }
@@ -35,15 +35,15 @@ impl<'a> Instruction<'a> {
 fn process_instruction(program_id: &Address, accounts: &mut [AccountView], data: &[u8]) -> ProgramResult {
     match Instruction::from_bytes(data)? {
         Instruction::Open(args) => open::process(program_id, accounts, &args),
-        #[channel(devnet)]
+        #[channel(devnet, "hooks")]
         Instruction::OpenWithHooks(args) => open::process_with_hooks(program_id, accounts, &args),
     }
 }
 
-#[solex::channel(devnet)]
+#[solex::channel(devnet, "hooks")]
 pub const WITH_HOOKS_DISCRIMINATOR: u8 = 10;
 
-#[solex::channel(devnet)]
+#[solex::channel(devnet, "hooks")]
 pub fn process_with_hooks(...) -> ProgramResult { ... }
 ```
 

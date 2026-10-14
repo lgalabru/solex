@@ -38,10 +38,6 @@ tag-only and exists for others to `include`), `cluster` (moniker or RPC URL,
 or a list), `keypair` (first deploy only), `upgrade_authority`, `includes`,
 `vars`, `description`.
 
-`features = ["hooks"]` lists feature tags a channel ships beyond its own
-name; `#[channel(hooks)]` then compiles into that channel and into every
-channel that includes it. Tags use lowercase letters, digits, `-` or `_`.
-
 Per-cluster overrides, `[channels.<channel>.<cluster>]`, may set `program_id`,
 `keypair`, `upgrade_authority` and `vars` (merged over the channel's). The
 key must be one of the channel's clusters. With overrides, the channel builds

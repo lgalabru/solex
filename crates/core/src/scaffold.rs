@@ -90,7 +90,6 @@ pub fn init(parent: &Path, opts: &InitOptions) -> Result<Created> {
                         .unwrap_or("localnet"),
                 ),
                 upgrade_authority: None,
-                features: Vec::new(),
                 includes: if i == 0 {
                     vec![]
                 } else {

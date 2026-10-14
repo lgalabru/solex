@@ -62,11 +62,11 @@ $ solex features
 
   counter  3 gated items in 1 file, 2 channels
 
-  gate                         items   stable   nightly
-  ───────────────────────────  ─────  ───────  ────────
-  #[channel(stable)]               2     ✓        ✓
+  feature  gate                         items   stable   nightly
+  ───────  ───────────────────────────  ─────  ───────  ────────
+  –        #[channel(stable)]               2     ✓        ✓
     initialize, increment
-  #[channel([nightly, 1000])]      1     –      ✓@1000
+  reset    #[channel([nightly, 1000])]      1     –      ✓@1000
     reset
 ```
 
@@ -153,17 +153,22 @@ includes = ["stable"]
 | `#[channel(stable, nightly)]` | compiled if the channel ships any listed tag |
 | `#[channel([nightly, 850])]` | compiled into `nightly`; inactive until epoch 850 |
 | `#[channel(stable, [nightly, 850])]` | unconditional on stable, epoch-gated on a nightly-only build |
-| `#[channel(hooks)]` | a feature tag: ships on channels whose `features` list it, or that include one that does |
+| `#[channel(devnet, "hooks")]` | same gate, and names the feature: every marker carrying `"hooks"` is one group in `solex features` |
 
-A channel ships its own name, its `features`, and the same for every channel it `includes`, transitively. Tagging code with a feature name keeps the "what" in the source and the "where" in the manifest, so promotion is a manifest edit:
+A channel ships its own name and the names of every channel it `includes`, transitively. A gated feature usually touches many places (variants, dispatch arms, handlers, discriminators); give them all the same quoted name and solex treats them as one unit:
 
-```toml
-[channels.devnet]
-includes = ["mainnet"]
-features = ["hooks"]          # move this line to mainnet to promote the hooks
+```console
+$ solex features
+
+  feature  gate                items  mainnet  testnet  devnet  localnet
+  ───────  ──────────────────  ─────  ───────  ───────  ──────  ────────
+  hooks    #[channel(devnet)]     24     –        –       ✓        ✓
+    OpenWithHooks, TopUpWithHooks, DistributeWithHooks, WithdrawPayerWithHooks
+    process_with_hooks ×3, load_with_hooks
+    + 12 match arms, 4 consts
 ```
 
-A tag that is neither a channel nor a declared feature fails `solex features --check`.
+`solex channels` lists the features each channel ships, and a feature whose markers disagree on their gate is flagged. A tag that is not a channel fails `solex features --check`.
 
 The attribute works on functions, structs, impls and modules. Epoch gates apply to functions only. `solex::active_channel!()` and `solex::ships!(nightly)` expose the channel to your own code.
 

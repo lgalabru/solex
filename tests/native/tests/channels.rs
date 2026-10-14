@@ -78,7 +78,9 @@ fn gated_enum_and_dispatch_follow_channel() {
 }
 
 #[test]
-fn feature_tags_follow_the_manifest() {
-    // `hooks` is declared on nightly; canary includes nightly.
-    assert_eq!(p::HAS_HOOKS, p::HAS_NIGHTLY);
+fn named_feature_follows_its_channel_tag() {
+    // `#[channel(nightly, "hooks")]`: the name is a label, nightly decides
+    // whether `hooks_feature` exists at all.
+    let expected = if p::HAS_NIGHTLY { Some(7) } else { None };
+    assert_eq!(p::hooks_feature_value(), expected);
 }

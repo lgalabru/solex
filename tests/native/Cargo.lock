@@ -793,7 +793,7 @@ dependencies = [
 
 [[package]]
 name = "solex-lang"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "solana-clock 3.2.1",
  "solana-msg",
@@ -805,7 +805,7 @@ dependencies = [
 
 [[package]]
 name = "solex-macros"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "bs58",
  "proc-macro2",
@@ -823,7 +823,7 @@ dependencies = [
 
 [[package]]
 name = "solex-types"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "indexmap",
  "proc-macro2",

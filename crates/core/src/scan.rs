@@ -24,8 +24,10 @@ pub struct GatedItem {
     pub line: usize,
     pub kind: &'static str,
     pub name: String,
-    /// Human-readable spelling of the attribute arguments.
+    /// The channel part of the attribute as written, e.g. `[nightly, 850]`.
     pub spec_text: String,
+    /// The quoted feature name, when the attribute carries one.
+    pub feature: Option<String>,
     pub spec: FeatureSpec,
 }
 
@@ -120,7 +122,8 @@ impl Collector {
                     line: span.start().line,
                     kind,
                     name: name.clone(),
-                    spec_text: list.tokens.to_string().replace(" ,", ","),
+                    spec_text: spec.tags_text(),
+                    feature: spec.feature.clone(),
                     spec,
                 }),
                 Err(e) => {
@@ -263,7 +266,7 @@ mod tests {
     const SRC: &str = r#"
         solex::declare_id!();
 
-        #[solex::channel(nightly)]
+        #[solex::channel(nightly, "hooks")]
         pub struct Thing;
 
         impl Thing {
@@ -332,6 +335,9 @@ channels:
         );
         assert_eq!(items[0].file, Path::new("lib.rs"));
         assert!(items[0].line > 0);
+        assert_eq!(items[0].feature.as_deref(), Some("hooks"));
+        assert_eq!(items[0].spec_text, "nightly");
+        assert_eq!(items[3].spec_text, "[nightly, 850], canary");
     }
 
     #[test]

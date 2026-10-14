@@ -125,9 +125,20 @@ pub fn dispatch_count() -> u8 {
     n
 }
 
-/// A feature tag: the manifest says which channels ship `hooks`.
-#[channel(hooks)]
-pub const HOOKS_PRESENT: bool = true;
-#[cfg(any())]
-pub const HOOKS_PRESENT: bool = false;
-pub const HAS_HOOKS: bool = solex::ships!(hooks);
+/// A named feature: the string labels the item, the channel says where.
+#[channel(nightly, "hooks")]
+pub fn hooks_feature() -> u8 {
+    7
+}
+
+/// Probe usable on every channel: `Some` only where the feature compiled in.
+#[solex::gated]
+pub fn hooks_feature_value() -> Option<u8> {
+    #[allow(unused_mut)]
+    let mut v = None;
+    #[channel(nightly, "hooks")]
+    {
+        v = Some(hooks_feature());
+    }
+    v
+}

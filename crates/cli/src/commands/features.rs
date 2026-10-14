@@ -71,6 +71,7 @@ impl FeaturesCommand {
                         "line": item.line,
                         "kind": item.kind,
                         "name": item.name,
+                        "feature": item.feature,
                         "channel_attr": item.spec_text,
                         "channels": per,
                     })
@@ -187,22 +188,33 @@ fn print_table(matrix: &scan::Matrix, channels: &[String]) {
     println!();
 }
 
-/// Default view: one row per distinct `#[channel(...)]` attribute, with the
-/// names behind it, so the table answers "what ships where" rather than
-/// listing dispatch plumbing.
+/// Default view: one row per feature (the quoted name in the attribute), or
+/// per distinct channel attribute for unnamed markers, so the table answers
+/// "what ships where" rather than listing dispatch plumbing.
 fn print_gates(name: &str, matrix: &scan::Matrix, channels: &[String]) {
     if matrix.rows.is_empty() {
         println!("  {}", style::dim("no #[channel] attributes found"));
         return;
     }
-    let mut gates: Vec<(&str, &Vec<Cell>, Vec<&scan::GatedItem>)> = Vec::new();
+    struct Group<'a> {
+        feature: Option<&'a str>,
+        spec: &'a str,
+        cells: &'a Vec<Cell>,
+        items: Vec<&'a scan::GatedItem>,
+    }
+    let mut groups: Vec<Group> = Vec::new();
     for (item, cells) in &matrix.rows {
-        match gates
+        let same = groups
             .iter_mut()
-            .find(|(spec, _, _)| *spec == item.spec_text)
-        {
-            Some((_, _, items)) => items.push(item),
-            None => gates.push((item.spec_text.as_str(), cells, vec![item])),
+            .find(|g| g.feature == item.feature.as_deref() && g.spec == item.spec_text);
+        match same {
+            Some(g) => g.items.push(item),
+            None => groups.push(Group {
+                feature: item.feature.as_deref(),
+                spec: item.spec_text.as_str(),
+                cells,
+                items: vec![item],
+            }),
         }
     }
     let files: std::collections::BTreeSet<&std::path::Path> =
@@ -224,16 +236,23 @@ fn print_gates(name: &str, matrix: &scan::Matrix, channels: &[String]) {
     );
     println!();
 
-    let gate_w = gates
+    let feat_w = groups
         .iter()
-        .map(|(spec, _, _)| spec.len() + "#[channel()]".len())
+        .map(|g| g.feature.map(str::len).unwrap_or(1))
+        .max()
+        .unwrap_or(7)
+        .max(7);
+    let gate_w = groups
+        .iter()
+        .map(|g| g.spec.len() + "#[channel()]".len())
         .max()
         .unwrap_or(10)
         .max(10);
     let col_w = channels.iter().map(|c| c.len()).max().unwrap_or(6).max(8);
 
     print!(
-        "  {}  {}",
+        "  {}  {}  {}",
+        style::pad_then("feature", feat_w, style::bold),
         style::pad_then("gate", gate_w, style::bold),
         style::bold("items")
     );
@@ -248,16 +267,26 @@ fn print_gates(name: &str, matrix: &scan::Matrix, channels: &[String]) {
         );
     }
     println!();
-    print!("  {}  {}", "─".repeat(gate_w), "─".repeat(5));
+    print!(
+        "  {}  {}  {}",
+        "─".repeat(feat_w),
+        "─".repeat(gate_w),
+        "─".repeat(5)
+    );
     for _ in channels {
         print!("  {}", "─".repeat(col_w));
     }
     println!();
 
-    for (spec, cells, items) in &gates {
-        let label = format!("#[channel({spec})]");
-        print!("  {label:<gate_w$}  {:>5}", items.len());
-        for cell in cells.iter() {
+    for g in &groups {
+        let feature = g.feature.unwrap_or("–");
+        let label = format!("#[channel({})]", g.spec);
+        print!(
+            "  {}  {label:<gate_w$}  {:>5}",
+            style::pad_then(feature, feat_w, style::bold),
+            g.items.len()
+        );
+        for cell in g.cells.iter() {
             let (text, visible) = match cell {
                 Cell::Excluded => (style::dim("–"), 1),
                 Cell::Included => (style::green("✓"), 1),
@@ -270,8 +299,31 @@ fn print_gates(name: &str, matrix: &scan::Matrix, channels: &[String]) {
             print!("  {}{text}{}", " ".repeat(left), " ".repeat(right));
         }
         println!();
-        for line in summarize(items) {
+        for line in summarize(&g.items) {
             println!("    {}", style::dim(&line));
+        }
+    }
+
+    // One feature, several gates: usually one marker was left behind.
+    let mut seen: Vec<&str> = Vec::new();
+    for g in &groups {
+        let Some(f) = g.feature else { continue };
+        if seen.contains(&f) {
+            continue;
+        }
+        seen.push(f);
+        let specs: Vec<String> = groups
+            .iter()
+            .filter(|o| o.feature == Some(f))
+            .map(|o| format!("#[channel({})]", o.spec))
+            .collect();
+        if specs.len() > 1 {
+            println!();
+            println!(
+                "  {} feature `{f}` is gated inconsistently: {}",
+                style::warn(),
+                specs.join(" vs ")
+            );
         }
     }
     println!();

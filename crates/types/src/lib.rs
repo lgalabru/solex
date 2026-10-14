@@ -96,8 +96,4 @@ pub enum Error {
     },
     #[error("invalid channel name `{0}`: use lowercase letters, digits, `-` or `_`")]
     InvalidChannelName(String),
-    #[error(
-        "channel `{channel}` declares an invalid feature name `{feature}`: use lowercase letters, digits, `-` or `_`"
-    )]
-    InvalidFeatureName { channel: String, feature: String },
 }

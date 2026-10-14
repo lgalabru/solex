@@ -24,20 +24,21 @@ as one diff each. The stable artifact stays small.
    If there is no manifest, `solex init <name>` or add a `[solex]` section.
 2. Write the change. Tag anything not ready for every channel with the channel
    it belongs to: `#[channel(nightly)]` on the instruction handler, its accounts
-   struct, and any new state. Leave stable code untagged.
+   struct, and any new state, each with the same quoted feature name. Leave
+  stable code untagged.
 3. `solex features --check` to see the item × channel matrix and catch tags no
    channel defines. Paste the table into the PR description.
 4. `solex build --channel nightly` then `solex deploy --channel nightly`.
-5. Promote in the manifest: move the feature from `nightly.features` to
-   `stable.features`. For channel-name tags, edit the attribute instead. Never
-   copy code paths.
+5. Promote by changing the channel tag on every marker of the feature
+   (`solex features` shows the count and flags a marker left behind), or
+   remove the tag so the feature ships everywhere. Never copy code paths.
 
 # Tagging rules
 
-- Prefer feature tags that say what the code is: `#[channel(hooks)]` with
-  `features = ["hooks"]` on the channel that ships it. Promotion is then a
-  one-line manifest edit and the source never changes. Channel names
-  (`stable`, `nightly`) work as tags too, for code tied to a release train.
+- Name the feature in the attribute: `#[channel(devnet, "hooks")]`. The
+  channel says where it ships, the quoted name groups every marker of that
+  feature (variants, arms, handlers, consts) into one row of `solex features`
+  and one line of `solex channels`. Use the same name on all of them.
 - A channel `includes` the channels whose tags it also ships, so `nightly`
   typically `includes = ["stable"]`. Clusters are channel properties, never tags.
 - `cluster = ["mainnet-beta", "devnet"]` deploys one channel to several
