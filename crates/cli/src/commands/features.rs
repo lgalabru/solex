@@ -278,14 +278,14 @@ fn print_gates(name: &str, config: &Channels, matrix: &scan::Matrix, channels: &
         .map(|g| g.spec.len() + "#[channel()]".len())
         .max()
         .unwrap_or(10)
-        .max(10);
+        .max("channels".len());
     let col_w = channels.iter().map(|c| c.len()).max().unwrap_or(6).max(8);
 
     print!(
         "  {}  {}  {}",
         style::pad_then("feature", feat_w, style::bold),
-        style::pad_then("gate", gate_w, style::bold),
-        style::bold("items")
+        style::pad_then("channels", gate_w, style::bold),
+        style::bold("gates")
     );
     for ch in channels {
         let left = col_w.saturating_sub(ch.len()) / 2;
