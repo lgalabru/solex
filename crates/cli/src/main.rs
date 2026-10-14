@@ -11,6 +11,8 @@ mod style;
     name = "solex",
     version,
     about = "Every increment ships. Only the proven ones reach stable.",
+    after_help = "Any command taking --channel also accepts the channel name as a flag: \
+                  `solex build --nightly`.",
     propagate_version = true
 )]
 struct Cli {
@@ -55,8 +57,38 @@ enum Command {
     Completions(commands::completions::CompletionsCommand),
 }
 
+/// `solex build --nightly` is `solex build --channel nightly`. Channel names
+/// live in the manifest, so this runs before clap and only rewrites a flag
+/// that matches a declared channel; anything after `--` is left alone.
+fn expand_channel_flags(args: Vec<String>) -> Vec<String> {
+    let Some(names) = std::env::current_dir()
+        .ok()
+        .and_then(|cwd| solex_core::Project::discover(&cwd).ok())
+        .map(|p| p.channels().names())
+    else {
+        return args;
+    };
+    let mut out = Vec::with_capacity(args.len() + 1);
+    let mut passthrough = false;
+    for arg in args {
+        if passthrough || arg == "--" {
+            passthrough = true;
+            out.push(arg);
+            continue;
+        }
+        match arg.strip_prefix("--") {
+            Some(name) if names.iter().any(|n| n == name) => {
+                out.push("--channel".into());
+                out.push(name.to_string());
+            }
+            _ => out.push(arg),
+        }
+    }
+    out
+}
+
 fn main() {
-    let cli = Cli::parse();
+    let cli = Cli::parse_from(expand_channel_flags(std::env::args().collect()));
     style::init(!cli.no_color);
     let result = match cli.command {
         Command::Init(cmd) => cmd.execute(),
