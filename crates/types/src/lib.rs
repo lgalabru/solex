@@ -24,8 +24,8 @@ pub mod spec;
 
 pub use channels::{Channel, Channels, is_valid_channel_name};
 pub use manifest::{
-    CHANNEL_ENV, Format, HOST_FILES, Loaded, MANIFEST_ENV, MANIFEST_FILES, Manifest, SECTION_KEY,
-    Source, discover, find, load, parse, to_string,
+    BuildConfig, CHANNEL_ENV, Format, HOST_FILES, Loaded, MANIFEST_ENV, MANIFEST_FILES, Manifest,
+    SECTION_KEY, Source, discover, find, load, parse, to_string,
 };
 
 pub type Result<T> = std::result::Result<T, Error>;

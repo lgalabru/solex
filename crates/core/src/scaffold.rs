@@ -103,7 +103,7 @@ pub fn init(parent: &Path, opts: &InitOptions) -> Result<Created> {
     let manifest = Manifest {
         name: Some(opts.name.clone()),
         program_path: None,
-        build_args: Vec::new(),
+        build: Default::default(),
         channels: Channels {
             default_channel: Some(opts.channels[0].clone()),
             channels,

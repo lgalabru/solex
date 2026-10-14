@@ -32,10 +32,9 @@ pub struct Manifest {
     /// Path to the program crate, relative to the manifest. Defaults to `.`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub program_path: Option<PathBuf>,
-    /// Extra arguments for `cargo build-sbf` on every channel, such as
-    /// `["--tools-version", "v1.58", "--arch", "v3"]`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub build_args: Vec<String>,
+    /// How to turn the program crate into a `.so`. Defaults to `cargo build-sbf`.
+    #[serde(default, skip_serializing_if = "BuildConfig::is_default")]
+    pub build: BuildConfig,
     #[serde(flatten)]
     pub channels: Channels,
 }
@@ -43,6 +42,51 @@ pub struct Manifest {
 impl Manifest {
     pub fn validate(&self) -> Result<()> {
         self.channels.validate()
+    }
+}
+
+/// The build pipeline. Solex only owns the environment (`SOLEX_CHANNEL`,
+/// `SOLEX_MANIFEST`); the command can be anything that compiles the crate.
+///
+/// ```toml
+/// [build]
+/// # default: cargo build-sbf with --manifest-path and --sbf-out-dir added
+/// args = ["--tools-version", "v1.58", "--arch", "v3"]
+///
+/// # upstream rustc + sbpf-linker (https://github.com/blueshift-gg/sbpf-linker)
+/// # command = ["cargo", "+nightly", "build-bpf"]
+/// # artifact = "target/bpfel-unknown-none/release/lib{lib}.so"
+/// ```
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct BuildConfig {
+    /// Program and leading arguments, run in the program directory. Empty
+    /// means `cargo build-sbf`, for which solex also passes `--manifest-path`
+    /// and `--sbf-out-dir`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub command: Vec<String>,
+    /// Arguments appended after the command on every channel.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+    /// Where the command leaves the `.so`, relative to the project root, with
+    /// `{name}` (package name), `{lib}` (package name with `-` as `_`) and
+    /// `{channel}` substituted. Required for a custom `command`; the artifact
+    /// is copied to `target/solex/<channel>/`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact: Option<String>,
+}
+
+impl BuildConfig {
+    pub fn is_default(&self) -> bool {
+        self.command.is_empty() && self.args.is_empty() && self.artifact.is_none()
+    }
+
+    /// Whether the pipeline is the stock `cargo build-sbf`.
+    pub fn is_build_sbf(&self) -> bool {
+        self.command.is_empty()
+            || (self.command.len() == 2
+                && self.command[0] == "cargo"
+                && self.command[1] == "build-sbf")
     }
 }
 
@@ -249,7 +293,8 @@ mod tests {
     const YAML: &str = r#"
 name: counter
 default_channel: stable
-build_args: ["--arch", "v3"]
+build:
+  args: ["--arch", "v3"]
 channels:
   stable:
     program_id: "11111111111111111111111111111111"
@@ -265,7 +310,7 @@ channels:
     const TOML: &str = r#"
 name = "counter"
 default_channel = "stable"
-build_args = ["--arch", "v3"]
+build = { args = ["--arch", "v3"] }
 
 [channels.stable]
 program_id = "11111111111111111111111111111111"
@@ -304,7 +349,8 @@ includes = ["stable"]
         assert_eq!((sy, st), (Source::Standalone, Source::Standalone));
         assert_eq!(y.channels.names(), ["stable", "nightly"]);
         assert_eq!(y.name.as_deref(), Some("counter"));
-        assert_eq!(y.build_args, ["--arch", "v3"]);
+        assert_eq!(y.build.args, ["--arch", "v3"]);
+        assert!(y.build.is_build_sbf());
         assert_eq!(
             y.channels.channel("stable").unwrap().vars["treasury"],
             "4zTeC5mVqWLruDexgU2mV66p9t5vCA9JyiZqdGDUspap"

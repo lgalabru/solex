@@ -1,8 +1,11 @@
 pub mod build;
 pub mod channel;
 pub mod channels;
+pub mod close;
 pub mod completions;
 pub mod deploy;
+pub mod env;
+pub mod exec;
 pub mod features;
 pub mod init;
 pub mod keys;

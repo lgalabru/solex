@@ -29,6 +29,12 @@ enum Command {
     Build(commands::build::BuildCommand),
     /// Deploy a channel's build to its cluster
     Deploy(commands::deploy::DeployCommand),
+    /// Close a channel's program or buffers and reclaim rent
+    Close(commands::close::CloseCommand),
+    /// Print the environment that selects a channel, for other build pipelines
+    Env(commands::env::EnvCommand),
+    /// Run a command with a channel selected (e.g. cargo +nightly build-bpf)
+    Exec(commands::exec::ExecCommand),
     /// List channels, program ids and what each one ships
     Channels(commands::channels::ChannelsCommand),
     /// Show the #[channel] matrix: which items ship on which channel
@@ -55,6 +61,9 @@ fn main() {
         Command::Init(cmd) => cmd.execute(),
         Command::Build(cmd) => cmd.execute(),
         Command::Deploy(cmd) => cmd.execute(),
+        Command::Close(cmd) => cmd.execute(),
+        Command::Env(cmd) => cmd.execute(),
+        Command::Exec(cmd) => cmd.execute(),
         Command::Channels(cmd) => cmd.execute(),
         Command::Features(cmd) => cmd.execute(),
         Command::Keys(cmd) => cmd.execute(),

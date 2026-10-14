@@ -51,28 +51,55 @@ pub fn channel_env(project: &Project, channel: &str) -> Vec<(&'static str, Strin
 }
 
 /// The command that would run, for `--dry-run` and verbose output.
+///
+/// With the stock pipeline this is `cargo build-sbf` pointed at the program
+/// crate and the channel's output directory. With a custom `[build] command`
+/// it is that command verbatim, run in the program directory; solex adds only
+/// the environment and the manifest's `args`.
 pub fn build_command(project: &Project, channel: &str, opts: &BuildOptions) -> Command {
+    let cfg = &project.manifest().build;
     let out_dir = project.channel_out_dir(channel);
-    let mut cmd = Command::new("cargo");
-    cmd.arg("build-sbf")
-        .arg("--manifest-path")
-        .arg(project.program_manifest())
-        .arg("--sbf-out-dir")
-        .arg(&out_dir);
-    if let Some(v) = &opts.tools_version {
-        cmd.args(["--tools-version", v]);
-    }
-    if opts.debug {
-        cmd.arg("--debug");
-    }
-    if !opts.features.is_empty() {
-        cmd.args(["--features", &opts.features.join(",")]);
-    }
-    cmd.args(&project.manifest().build_args);
+    let mut cmd = if cfg.is_build_sbf() {
+        let mut cmd = Command::new("cargo");
+        cmd.arg("build-sbf")
+            .arg("--manifest-path")
+            .arg(project.program_manifest())
+            .arg("--sbf-out-dir")
+            .arg(&out_dir);
+        if let Some(v) = &opts.tools_version {
+            cmd.args(["--tools-version", v]);
+        }
+        if opts.debug {
+            cmd.arg("--debug");
+        }
+        if !opts.features.is_empty() {
+            cmd.args(["--features", &opts.features.join(",")]);
+        }
+        cmd
+    } else {
+        let mut cmd = Command::new(&cfg.command[0]);
+        cmd.args(&cfg.command[1..]);
+        if !opts.features.is_empty() {
+            cmd.args(["--features", &opts.features.join(",")]);
+        }
+        cmd
+    };
+    cmd.args(&cfg.args);
     cmd.args(&opts.extra_args);
     cmd.envs(channel_env(project, channel))
-        .current_dir(project.root());
+        .current_dir(project.program_dir());
     cmd
+}
+
+/// Resolve `[build] artifact` for a channel: `{name}`, `{lib}`, `{channel}`.
+pub fn artifact_path(project: &Project, channel: &str) -> Option<PathBuf> {
+    let pattern = project.manifest().build.artifact.as_ref()?;
+    let name = project.name();
+    let resolved = pattern
+        .replace("{name}", &name)
+        .replace("{lib}", &name.replace('-', "_"))
+        .replace("{channel}", channel);
+    Some(project.root().join(resolved))
 }
 
 pub fn build(project: &Project, channel: &str, opts: &BuildOptions) -> Result<BuildOutput> {
@@ -80,11 +107,30 @@ pub fn build(project: &Project, channel: &str, opts: &BuildOptions) -> Result<Bu
     let out_dir = project.channel_out_dir(channel);
     std::fs::create_dir_all(&out_dir).map_err(|e| CoreError::io("create", &out_dir, e))?;
 
+    let cfg = &project.manifest().build;
+    if !cfg.is_build_sbf() && cfg.artifact.is_none() {
+        return Err(CoreError::message(
+            "[build] command is set but [build] artifact is not; add the path the command \
+             writes, e.g. artifact = \"target/bpfel-unknown-none/release/lib{lib}.so\"",
+        ));
+    }
+
     let start = Instant::now();
     let mut cmd = build_command(project, channel, opts);
-    run(&mut cmd, "cargo build-sbf", opts.verbose)?;
+    let label = if cfg.is_build_sbf() {
+        "cargo build-sbf".to_string()
+    } else {
+        cfg.command.join(" ")
+    };
+    run(&mut cmd, &label, opts.verbose)?;
 
     remove_stray_keypairs(&out_dir);
+    // A custom pipeline leaves the artifact wherever it likes; copy it into
+    // the channel directory so every downstream step sees one layout.
+    if let Some(src) = artifact_path(project, channel) {
+        let dest = out_dir.join(src.file_name().unwrap_or_default());
+        std::fs::copy(&src, &dest).map_err(|e| CoreError::io("copy", &src, e))?;
+    }
     let so_path = find_so(&out_dir)?;
     let size = std::fs::metadata(&so_path)
         .map(|m| m.len())
@@ -208,4 +254,64 @@ pub fn display_command(cmd: &Command) -> String {
         }
     }));
     parts.join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use solex_types::{BuildConfig, Channel, Channels};
+
+    use super::*;
+
+    fn project(build: BuildConfig) -> Project {
+        let dir = std::env::temp_dir().join(format!("solex-build-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            "[package]\nname = \"my-prog\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        let mut channels = Channels::default();
+        channels.channels.insert(
+            "stable".into(),
+            Channel {
+                program_id: Some("11111111111111111111111111111111".into()),
+                ..Default::default()
+            },
+        );
+        let mut p = Project::from_parts(channels, &dir.join("Solex.toml"), None, None).unwrap();
+        p.loaded.manifest.build = build;
+        p
+    }
+
+    #[test]
+    fn default_pipeline_is_build_sbf_with_channel_env() {
+        let p = project(BuildConfig::default());
+        let cmd = build_command(&p, "stable", &BuildOptions::default());
+        let shown = display_command(&cmd);
+        assert!(shown.contains("SOLEX_CHANNEL=stable"), "{shown}");
+        assert!(shown.contains("cargo build-sbf --manifest-path"), "{shown}");
+        assert!(shown.contains("target/solex/stable"), "{shown}");
+        assert!(artifact_path(&p, "stable").is_none());
+    }
+
+    #[test]
+    fn custom_pipeline_runs_verbatim_and_resolves_artifact() {
+        let p = project(BuildConfig {
+            command: vec!["cargo".into(), "+nightly".into(), "build-bpf".into()],
+            args: vec!["--release".into()],
+            artifact: Some("target/bpfel-unknown-none/release/lib{lib}.so".into()),
+        });
+        let cmd = build_command(&p, "stable", &BuildOptions::default());
+        let shown = display_command(&cmd);
+        assert!(
+            shown.ends_with("cargo +nightly build-bpf --release"),
+            "{shown}"
+        );
+        assert!(!shown.contains("--sbf-out-dir"), "{shown}");
+        let art = artifact_path(&p, "stable").unwrap();
+        assert!(
+            art.ends_with("target/bpfel-unknown-none/release/libmy_prog.so"),
+            "{art:?}"
+        );
+    }
 }
