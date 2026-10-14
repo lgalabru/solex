@@ -59,12 +59,12 @@ See what each channel ships, one row per feature:
 
 ```console
 $ solex features
-
-  counter  1 gated item in 1 file, 2 channels
-
-  feature  channels  gates   stable   nightly
-  ───────  ────────  ─────  ───────  ────────
-  reset    nightly       1     –      ✓@1000
++---------+----------+-------+--------+---------+
+| feature | channels | gates | stable | nightly |
++---------+----------+-------+--------+---------+
+| -       | stable   |     2 |   ✓    |    ✓    |
+| reset   | nightly  |     1 |   -    | ✓@1000  |
++---------+----------+-------+--------+---------+
 ```
 
 `solex features reset` lists that feature's markers with file and line, `--items` lists all of them, `--json` is for tooling.

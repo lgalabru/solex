@@ -47,88 +47,58 @@ impl ChannelsCommand {
             return Ok(());
         }
 
-        println!();
-        println!(
-            "  {} {}",
-            style::bold(&project.name()),
-            style::dim(&project.manifest_path().display().to_string())
-        );
-        println!();
+        let mut rows = Vec::new();
         for (name, ch) in &m.channels {
-            let marker = if active.as_deref() == Some(name.as_str()) {
-                style::green("●")
+            let label = if active.as_deref() == Some(name.as_str()) {
+                format!("{name} *")
             } else {
-                style::dim("○")
+                name.clone()
             };
-            if !ch.is_deployable() {
-                println!(
-                    "  {marker} {} {}",
-                    style::accent(name),
-                    style::dim("(tag only: included by other channels, never built)")
-                );
-                if let Some(d) = &ch.description {
-                    println!("      {:<10} {}", style::dim("about"), d);
+            let program = if ch.is_deployable() {
+                let mut ids: Vec<String> = Vec::new();
+                if let Some(id) = &ch.program_id {
+                    ids.push(id.clone());
                 }
-                continue;
+                for (cluster, o) in &ch.overrides {
+                    if let Some(id) = &o.program_id {
+                        ids.push(format!("{id} ({cluster})"));
+                    }
+                }
+                ids.join(", ")
             } else {
-                println!("  {marker} {}", style::accent(name));
-                println!(
-                    "      {:<10} {}",
-                    style::dim("program"),
-                    ch.program_id.as_deref().unwrap_or("(unset)")
-                );
-            }
-            println!(
-                "      {:<10} {}",
-                style::dim("cluster"),
-                if ch.cluster.is_empty() {
-                    "(solana CLI default)".to_string()
-                } else {
-                    ch.cluster.0.join(", ")
-                }
-            );
-            let tags: Vec<_> = m.tags(name)?.into_iter().collect();
-            println!("      {:<10} {}", style::dim("ships"), tags.join(", "));
-            let feats = features_on(name);
-            if !feats.is_empty() {
-                println!(
-                    "      {:<10} {}",
-                    style::dim("features"),
-                    feats
-                        .iter()
-                        .map(|f| {
-                            match m.activation_epoch(f, name).ok().flatten() {
-                                Some(e) => format!("{} (from epoch {e})", style::bold(f)),
-                                None => style::bold(f),
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                );
-            }
-            for (k, v) in &ch.vars {
-                println!("      {:<10} {k} = {v}", style::dim("var"));
-            }
+                "(tag only)".into()
+            };
+            let mut vars: Vec<String> = ch.vars.iter().map(|(k, v)| format!("{k}={v}")).collect();
             for (cluster, o) in &ch.overrides {
-                if let Some(id) = &o.program_id {
-                    println!(
-                        "      {:<10} {cluster}: program {id}",
-                        style::dim("override")
-                    );
-                }
-                for (k, v) in &o.vars {
-                    println!("      {:<10} {cluster}: {k} = {v}", style::dim("override"));
-                }
+                vars.extend(o.vars.iter().map(|(k, v)| format!("{k}={v} ({cluster})")));
             }
-            if let Some(d) = &ch.description {
-                println!("      {:<10} {}", style::dim("about"), d);
-            }
+            let feats = features_on(name)
+                .iter()
+                .map(|f| match m.activation_epoch(f, name).ok().flatten() {
+                    Some(e) => format!("{f}@{e}"),
+                    None => f.clone(),
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            rows.push(vec![
+                label,
+                program,
+                ch.cluster.0.join(", "),
+                ch.includes.join(", "),
+                feats,
+                vars.join(", "),
+            ]);
         }
-        println!();
-        if let Some(a) = active {
-            println!("  {} default channel: {a}", style::dim("●"));
-            println!();
-        }
+        print!(
+            "{}",
+            style::table(
+                &[
+                    "channel", "program", "cluster", "includes", "features", "vars"
+                ],
+                &rows,
+                &[style::Align::Left; 6],
+            )
+        );
         Ok(())
     }
 }
