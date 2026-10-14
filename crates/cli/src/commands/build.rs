@@ -6,7 +6,7 @@ use solex_core::{
     build::{self, BuildOptions},
 };
 
-use crate::{commands, style};
+use crate::{commands, components, style};
 
 #[derive(Args, Debug, Default)]
 pub struct BuildCommand {
@@ -68,19 +68,20 @@ impl BuildCommand {
 
         let untracked = solex_core::scan::untracked_env(&project.program_dir());
         if !untracked.is_empty() && !self.dry_run {
-            eprintln!(
-                "  {} {} does not declare rerun-if-env-changed for {}; cargo may reuse another \
-                 channel's compilation. Add to build.rs:",
-                style::warn(),
-                project.program_dir().join("build.rs").display(),
-                untracked.join(", ")
+            let body = untracked
+                .iter()
+                .map(|v| format!("println!(\"cargo:rerun-if-env-changed={v}\");"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            components::print_notice(
+                components::NoticeLevel::Warning,
+                &format!(
+                    "{} does not track {}; cargo may reuse another channel's compilation. Add:",
+                    project.program_dir().join("build.rs").display(),
+                    untracked.join(", ")
+                ),
+                &body,
             );
-            for v in &untracked {
-                eprintln!(
-                    "      {}",
-                    style::dim(&format!("println!(\"cargo:rerun-if-env-changed={v}\");"))
-                );
-            }
         }
         for channel in &channels {
             // One build per cluster when overrides make the artifacts differ.
@@ -103,38 +104,39 @@ impl BuildCommand {
                     continue;
                 }
                 if self.verbose {
-                    eprintln!("  {}", style::dim(&build::display_command(&cmd)));
+                    eprintln!("{}", components::tip(&build::display_command(&cmd)));
                 }
                 let label = match &opts.cluster {
-                    Some(c) => format!("{channel} ({c})"),
-                    None => channel.clone(),
+                    Some(c) if ch.has_overrides() => format!("{channel}/{c}"),
+                    _ => channel.clone(),
                 };
-                let sp = style::spinner(&format!("Building {}...", style::accent(&label)));
+                let sp = style::spinner(&format!("Building {label}..."));
                 let result = build::build(&project, channel, &opts);
                 sp.finish_and_clear();
                 let out = result?;
-                let shown = match &out.cluster {
-                    Some(c) if ch.has_overrides() => format!("{}/{c}", out.channel),
-                    _ => out.channel.clone(),
-                };
-                println!(
-                    "  {} {} {} {} {}",
-                    style::ok(),
-                    style::pad_then(&shown, 10, style::accent),
-                    style::dim(&out.program_id),
-                    style::dim(&style::human_size(out.size)),
-                    style::dim(&style::human_duration(out.elapsed)),
-                );
-                // Features the channel enabled, colored like everywhere else.
                 let features = build::channel_features(&project, channel, &opts.features)?;
-                if !features.is_empty() {
-                    let labels: Vec<String> = features
-                        .iter()
-                        .map(|f| style::channel_color(channel, f))
-                        .collect();
-                    println!("    {} {}", style::dim("features"), labels.join(" "));
-                }
-                println!("    {}", style::dim(&out.so_path.display().to_string()));
+                println!(
+                    "{}",
+                    components::ok(&format!(
+                        "{}  {}  {}  {}",
+                        style::pad_then(&label, 10, components::channel),
+                        style::dim(&components::short(&out.program_id)),
+                        style::dim(&style::human_size(out.size)),
+                        style::dim(&style::human_duration(out.elapsed)),
+                    ))
+                );
+                let fields = components::fields(&[
+                    (
+                        "features",
+                        features
+                            .iter()
+                            .map(|f| style::channel_color(channel, f))
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                    ),
+                    ("artifact", out.so_path.display().to_string()),
+                ]);
+                println!("{fields}");
             }
         }
         Ok(())

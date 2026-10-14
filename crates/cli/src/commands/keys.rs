@@ -6,7 +6,7 @@ use solex_core::{
     keys::{self, Keypair},
 };
 
-use crate::{commands, style};
+use crate::{commands, components, style};
 
 #[derive(Subcommand, Debug)]
 pub enum KeysCommand {
@@ -62,13 +62,13 @@ fn list(args: &KeysArgs) -> Result<()> {
             style::dim("(no keypair on disk)")
         };
         println!(
-            "  {} {}  {}",
-            style::pad_then(&name, 12, style::accent),
-            m.program_id(&name).unwrap_or("(unset)"),
-            status
+            "{}",
+            components::fields(&[(
+                &name,
+                format!("{}  {}", m.program_id(&name).unwrap_or("(unset)"), status)
+            )])
         );
     }
-    println!();
     Ok(())
 }
 
@@ -104,12 +104,14 @@ fn new(args: &NewArgs) -> Result<()> {
     project.save()?;
 
     println!(
-        "  {} {} → {}",
-        style::ok(),
-        style::accent(&args.channel),
-        style::bold(&id)
+        "{}",
+        components::ok(&format!(
+            "{} → {}",
+            components::channel(&args.channel),
+            style::bold(&id)
+        ))
     );
-    println!("    {}", style::dim(&path.display().to_string()));
+    println!("{}", components::tip(&path.display().to_string()));
     Ok(())
 }
 
@@ -121,9 +123,11 @@ fn check(args: &KeysArgs) -> Result<()> {
         let declared = m.program_id(&name)?;
         if let Err(reason) = keys::validate_pubkey(declared) {
             println!(
-                "  {} {} program_id `{declared}` is invalid: {reason}",
-                style::fail(),
-                style::pad_then(&name, 12, style::accent)
+                "{}",
+                components::fail(&format!(
+                    "{}  program_id `{declared}` is invalid: {reason}",
+                    components::channel(&name)
+                ))
             );
             failures += 1;
             continue;
@@ -131,26 +135,29 @@ fn check(args: &KeysArgs) -> Result<()> {
         let path = project.channel_keypair(&name)?;
         if !path.is_file() {
             println!(
-                "  {} {} {declared} {}",
-                style::ok(),
-                style::pad_then(&name, 12, style::accent),
-                style::dim("(no keypair on disk; upgrades only)")
+                "{}",
+                components::ok(&format!(
+                    "{}  {declared} {}",
+                    components::channel(&name),
+                    style::dim("(no keypair on disk; upgrades only)")
+                ))
             );
             continue;
         }
         let actual = keys::pubkey_of(&path)?;
         if actual == declared {
             println!(
-                "  {} {} {declared}",
-                style::ok(),
-                style::pad_then(&name, 12, style::accent)
+                "{}",
+                components::ok(&format!("{}  {declared}", components::channel(&name)))
             );
         } else {
             println!(
-                "  {} {} keypair {} is for {actual}, manifest says {declared}",
-                style::fail(),
-                style::pad_then(&name, 12, style::accent),
-                path.display()
+                "{}",
+                components::fail(&format!(
+                    "{}  keypair {} is for {actual}, manifest says {declared}",
+                    components::channel(&name),
+                    path.display()
+                ))
             );
             failures += 1;
         }

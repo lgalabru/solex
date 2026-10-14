@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 use clap::Args;
 use solex_core::{CoreError, Result};
 
-use crate::style;
+use crate::{components, style};
 
 const SKILL_REPO: &str = "https://github.com/lgalabru/solex";
 const SKILL_NAME: &str = "solex";
@@ -24,24 +24,19 @@ pub struct SetupCommand {
 
 impl SetupCommand {
     pub fn execute(&self) -> Result<()> {
-        println!();
         if !self.no_skill {
             install_skill()?;
         }
         if self.mcp {
             register_mcp()?;
         } else {
-            println!(
-                "  {} Register the MCP server with Claude Code via {} or:",
-                style::dim("tip"),
-                style::bold("solex setup --mcp")
-            );
-            println!(
-                "      {}",
-                style::dim("claude mcp add --scope user solex -- solex mcp")
+            components::print_notice(
+                components::NoticeLevel::Info,
+                "MCP server not registered",
+                "solex setup --mcp registers it with Claude Code, or add it yourself:\n\
+                 claude mcp add --scope user solex -- solex mcp",
             );
         }
-        println!();
         Ok(())
     }
 }
@@ -79,7 +74,10 @@ fn install_skill() -> Result<()> {
     sp.finish_and_clear();
     match status {
         Ok(out) if out.status.success() => {
-            println!("  {} Skill installed for your coding agents", style::ok());
+            println!(
+                "{}",
+                components::ok("Skill installed for your coding agents")
+            );
             Ok(())
         }
         Ok(out) => Err(CoreError::message(format!(
@@ -97,16 +95,13 @@ fn register_mcp() -> Result<()> {
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_else(|_| "solex".into());
     if !has("claude") {
-        println!(
-            "  {} `claude` CLI not found. Add this to your MCP client config:",
-            style::warn()
-        );
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&serde_json::json!({
+        components::print_notice(
+            components::NoticeLevel::Warning,
+            "`claude` CLI not found; add this to your MCP client config",
+            &serde_json::to_string_pretty(&serde_json::json!({
                 "mcpServers": { "solex": { "command": solex_bin, "args": ["mcp"] } }
             }))
-            .unwrap_or_default()
+            .unwrap_or_default(),
         );
         return Ok(());
     }
@@ -119,13 +114,16 @@ fn register_mcp() -> Result<()> {
         .output();
     match status {
         Ok(out) if out.status.success() => {
-            println!("  {} MCP server registered with Claude Code", style::ok());
+            println!(
+                "{}",
+                components::ok("MCP server registered with Claude Code")
+            );
             Ok(())
         }
         Ok(out) => {
             let msg = String::from_utf8_lossy(&out.stderr);
             if msg.contains("already exists") {
-                println!("  {} MCP server already registered", style::ok());
+                println!("{}", components::ok("MCP server already registered"));
                 Ok(())
             } else {
                 Err(CoreError::message(format!(

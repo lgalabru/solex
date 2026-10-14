@@ -29,9 +29,10 @@ pub fn frame(sections: &[Vec<Line>]) -> String {
         .join("\n")
 }
 
-/// A plain line: no styling, width is its char count.
+/// A plain line: no styling, width is its char count. Sanitized, since
+/// manifest text ends up here.
 pub fn plain(s: impl Into<String>) -> Line {
-    let s = s.into();
+    let s = super::terminal::sanitize(&s.into());
     let w = s.chars().count();
     (s, w)
 }
@@ -112,29 +113,9 @@ pub fn wrap(s: &str, width: usize) -> Vec<String> {
     lines
 }
 
-/// `CHNLxYvV…hyGsX`: keep both ends of a long identifier.
-pub fn short(id: &str) -> String {
-    let n = id.chars().count();
-    if n <= 13 {
-        return id.to_string();
-    }
-    let head: String = id.chars().take(4).collect();
-    let tail: String = id.chars().skip(n - 4).collect();
-    format!("{head}…{tail}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn short_keeps_ends() {
-        assert_eq!(
-            short("CHNLxYvVA28MJP9PrFuDXccuoGXAx7jBacfLEkahyGsX"),
-            "CHNL…yGsX"
-        );
-        assert_eq!(short("devnet"), "devnet");
-    }
 
     #[test]
     fn frame_is_80_columns() {

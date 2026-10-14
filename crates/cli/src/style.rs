@@ -22,10 +22,6 @@ pub fn fail() -> String {
     style("✗").red().bold().to_string()
 }
 
-pub fn warn() -> String {
-    style("!").yellow().bold().to_string()
-}
-
 pub fn bold(s: &str) -> String {
     style(s).bold().to_string()
 }

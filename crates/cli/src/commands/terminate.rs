@@ -6,13 +6,17 @@ use solex_core::{
     terminate::{self, TerminateOptions},
 };
 
-use crate::{commands, style};
+use crate::{
+    commands,
+    components::{self, NoticeLevel},
+    style,
+};
 
 /// Terminate a channel: close its program (or the authority's buffers) and
 /// reclaim the rent. The address can never execute code again.
 #[derive(Args, Debug, Default)]
 pub struct TerminateCommand {
-    /// Channel to close (default: SOLEX_CHANNEL or the manifest default)
+    /// Channel to terminate (default: SOLEX_CHANNEL or the manifest default)
     #[arg(long, short)]
     pub channel: Option<String>,
 
@@ -64,61 +68,55 @@ impl TerminateCommand {
             buffers: self.buffers,
         };
         let plan = terminate::plan(&project, &channel, &opts)?;
-
-        println!();
-        println!(
-            "  {:<10} {}",
-            style::dim("channel"),
-            style::accent(&plan.channel)
-        );
-        println!(
-            "  {:<10} {}",
-            style::dim("target"),
-            if plan.buffers {
-                "buffer accounts of the authority".to_string()
-            } else {
-                format!("program {}", plan.program_id)
-            }
-        );
-        println!(
-            "  {:<10} {}",
-            style::dim("cluster"),
-            plan.cluster.as_deref().unwrap_or("(solana CLI default)")
-        );
-        if let Some(a) = &plan.authority {
-            println!("  {:<10} {}", style::dim("authority"), a.display());
-        }
-        println!(
-            "  {:<10} {}",
-            style::dim("recipient"),
-            plan.recipient
-                .as_deref()
-                .unwrap_or("(solana CLI default keypair)")
-        );
-        println!();
-        if !plan.buffers {
-            println!(
-                "  {} Closing a program is permanent: the address can never execute code again, \
-                 and every account that references it is orphaned.",
-                style::warn()
-            );
-            println!();
-        }
+        let command = solex_core::build::display_command(&plan.command());
 
         if self.dry_run {
-            println!("{}", solex_core::build::display_command(&plan.command()));
+            println!("{command}");
             return Ok(());
         }
+
+        let target = if plan.buffers {
+            "buffer accounts of the authority".to_string()
+        } else {
+            format!("program {}", components::short(&plan.program_id))
+        };
+        println!(
+            "{}",
+            components::fields(&[
+                ("channel", components::channel(&plan.channel)),
+                ("target", target),
+                (
+                    "cluster",
+                    plan.cluster
+                        .clone()
+                        .unwrap_or_else(|| "(solana CLI default)".into()),
+                ),
+                (
+                    "authority",
+                    plan.authority
+                        .as_ref()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_default(),
+                ),
+                (
+                    "recipient",
+                    plan.recipient
+                        .clone()
+                        .unwrap_or_else(|| "(solana CLI default keypair)".into()),
+                ),
+            ])
+        );
+
         if !self.yes {
-            println!(
-                "  Nothing sent. Re-run with {} to execute.",
-                style::bold("--yes")
+            components::print_notice(
+                NoticeLevel::Warning,
+                "Nothing sent",
+                &format!(
+                    "Closing a program is permanent: the address can never execute code again\n\
+                     and every account that references it is orphaned.\n\
+                     Re-run with --yes to execute:\n{command}"
+                ),
             );
-            println!(
-                "  {}",
-                style::dim(&solex_core::build::display_command(&plan.command()))
-            );
-            println!();
             return Ok(());
         }
         if plan.is_mainnet && !self.allow_mainnet {
@@ -132,19 +130,20 @@ impl TerminateCommand {
         let r = terminate::terminate(&plan, self.verbose);
         sp.finish_and_clear();
         let out = r?;
-        let reclaimed = out
+        let detail = out
             .lines()
             .find(|l| l.contains("Closed") || l.contains("SOL") || l.contains("lamports"))
             .map(str::trim)
             .unwrap_or("done");
-        println!(
-            "  {} Terminated {} on {}: {}",
-            style::ok(),
-            style::accent(&plan.channel),
-            plan.cluster.as_deref().unwrap_or("default cluster"),
-            reclaimed
+        components::print_notice(
+            NoticeLevel::Success,
+            &format!(
+                "Terminated {} on {}",
+                plan.channel,
+                plan.cluster.as_deref().unwrap_or("default cluster")
+            ),
+            detail,
         );
-        println!();
         Ok(())
     }
 }

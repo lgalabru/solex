@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::Args;
 use solex_core::Result;
 
-use crate::{boxed, commands, style};
+use crate::{commands, components, components::boxed, style};
 
 #[derive(Args, Debug, Default)]
 pub struct ChannelsCommand {
@@ -73,10 +73,13 @@ impl ChannelsCommand {
                 }
             }
             if let Some(id) = &ch.program_id {
-                let mut parts = vec![boxed::plain(boxed::short(id))];
+                let mut parts = vec![boxed::plain(components::short(id))];
                 for (cluster, o) in &ch.overrides {
                     if let Some(oid) = &o.program_id {
-                        parts.push(boxed::plain(format!("{cluster}: {}", boxed::short(oid))));
+                        parts.push(boxed::plain(format!(
+                            "{cluster}: {}",
+                            components::short(oid)
+                        )));
                     }
                 }
                 lines.push(boxed::field("program", boxed::join(&parts)));
@@ -102,13 +105,13 @@ impl ChannelsCommand {
                 let mut parts: Vec<boxed::Line> = ch
                     .vars
                     .iter()
-                    .map(|(k, v)| boxed::plain(format!("{k} = {}", boxed::short(v))))
+                    .map(|(k, v)| boxed::plain(format!("{k} = {}", components::short(v))))
                     .collect();
                 for (cluster, o) in &ch.overrides {
                     for (k, v) in &o.vars {
                         parts.push(boxed::plain(format!(
                             "{k} = {} ({cluster})",
-                            boxed::short(v)
+                            components::short(v)
                         )));
                     }
                 }

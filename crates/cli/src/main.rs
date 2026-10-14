@@ -2,8 +2,8 @@
 
 use clap::{CommandFactory, Parser, Subcommand};
 
-mod boxed;
 mod commands;
+mod components;
 mod style;
 
 #[derive(Parser, Debug)]
@@ -110,7 +110,12 @@ fn main() {
         }
     };
     if let Err(e) = result {
-        eprintln!("{} {e}", style::fail());
+        // First line is the headline; anything after it is detail.
+        let text = e.to_string();
+        let mut lines = text.lines();
+        let title = lines.next().unwrap_or("error");
+        let body: Vec<&str> = lines.map(str::trim_start).collect();
+        components::print_notice(components::NoticeLevel::Error, title, &body.join("\n"));
         std::process::exit(e.exit_code());
     }
 }

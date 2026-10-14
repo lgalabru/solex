@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 use clap::{Args, ValueEnum};
 use solex_core::{CoreError, Result, scaffold, types::Format};
 
-use crate::style;
+use crate::{components, style};
 
 #[derive(Args, Debug)]
 pub struct InitCommand {
@@ -71,36 +71,30 @@ impl InitCommand {
         };
         let created = scaffold::init(&self.path, &opts)?;
 
-        println!();
         println!(
-            "  {} Created {} in {}",
-            style::ok(),
-            style::bold(&self.name),
-            style::dim(&created.root.display().to_string())
+            "{}",
+            components::ok(&format!(
+                "Created {} {}",
+                style::bold(&self.name),
+                style::dim(&created.root.display().to_string())
+            ))
         );
-        println!();
-        println!("  {}", style::bold("Channels"));
-        for (ch, id) in &created.program_ids {
-            println!("    {} {}", style::pad_then(ch, 12, style::accent), id);
-        }
-        println!();
-        println!("  {}", style::bold("Next"));
-        println!("    cd {}", self.name);
-        println!(
-            "    solex features                 {}",
-            style::dim("# what ships where")
+        let rows: Vec<(&str, String)> = created
+            .program_ids
+            .iter()
+            .map(|(ch, id)| (ch.as_str(), format!("{}  {}", components::channel(ch), id)))
+            .collect();
+        println!("{}", components::fields(&rows));
+        components::print_notice(
+            components::NoticeLevel::Info,
+            "Next",
+            &format!(
+                "cd {}\nsolex features            what ships where\nsolex build --{}   \
+                 cargo build-sbf for one channel\nkeys/*.json hold deploy authority for each \
+                 channel and are gitignored.",
+                self.name, self.channels[0]
+            ),
         );
-        println!(
-            "    solex build --channel {}    {}",
-            self.channels[0],
-            style::dim("# cargo build-sbf for one channel")
-        );
-        println!();
-        println!(
-            "  {} keys/*.json hold deploy authority for each channel; they are gitignored.",
-            style::warn()
-        );
-        println!();
         Ok(())
     }
 }

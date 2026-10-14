@@ -1,0 +1,33 @@
+//! Channel labels and identifier shortening.
+
+use crate::style;
+
+/// A channel name in its color. Well-known names get fixed hues so a channel
+/// reads the same in every view; others hash into a small palette.
+pub fn channel(name: &str) -> String {
+    style::channel_color(name, name)
+}
+
+/// `CHNL…yGsX`: both ends of a long identifier (program ids, pubkeys).
+pub fn short(id: &str) -> String {
+    let id = super::terminal::sanitize(id);
+    let n = id.chars().count();
+    if n <= 13 {
+        return id;
+    }
+    let head: String = id.chars().take(4).collect();
+    let tail: String = id.chars().skip(n - 4).collect();
+    format!("{head}…{tail}")
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn short_keeps_ends() {
+        assert_eq!(
+            super::short("CHNLxYvVA28MJP9PrFuDXccuoGXAx7jBacfLEkahyGsX"),
+            "CHNL…yGsX"
+        );
+        assert_eq!(super::short("devnet"), "devnet");
+    }
+}

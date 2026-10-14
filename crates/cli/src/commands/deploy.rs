@@ -6,7 +6,7 @@ use solex_core::{
     deploy::{self, DeployOptions},
 };
 
-use crate::{commands, style};
+use crate::{commands, components, style};
 
 #[derive(Args, Debug, Default)]
 pub struct DeployCommand {
@@ -54,7 +54,7 @@ impl DeployCommand {
                 verbose: self.verbose,
                 ..Default::default()
             };
-            let sp = style::spinner(&format!("Building {}...", style::accent(&channel)));
+            let sp = style::spinner(&format!("Building {channel}..."));
             let r = build::build(&project, &channel, &opts);
             sp.finish_and_clear();
             r?;
@@ -68,40 +68,41 @@ impl DeployCommand {
         };
 
         for plan in deploy::plans(&project, &channel, &opts)? {
-            let target = plan
-                .cluster
-                .clone()
-                .unwrap_or_else(|| "(solana CLI default)".into());
-            println!();
-            println!(
-                "  {:<10} {}",
-                style::dim("channel"),
-                style::accent(&plan.channel)
-            );
-            println!("  {:<10} {}", style::dim("program"), plan.program_id);
-            println!("  {:<10} {target}", style::dim("cluster"));
-            println!("  {:<10} {}", style::dim("binary"), plan.so_path.display());
-            if let Some(auth) = &plan.upgrade_authority {
-                println!("  {:<10} {}", style::dim("authority"), auth.display());
-            }
-            println!();
-
+            let cluster = plan.cluster.as_deref();
+            let target = cluster.unwrap_or("(solana CLI default)");
             if self.dry_run {
                 println!("{}", build::display_command(&plan.command()));
                 continue;
             }
-
+            println!(
+                "{}",
+                components::fields(&[
+                    ("channel", components::channel(&plan.channel)),
+                    ("program", components::short(&plan.program_id)),
+                    ("cluster", target.to_string()),
+                    ("artifact", plan.so_path.display().to_string()),
+                    (
+                        "authority",
+                        plan.upgrade_authority
+                            .as_ref()
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_default(),
+                    ),
+                ])
+            );
             let sp = style::spinner(&format!("Deploying to {target}..."));
             let r = deploy::deploy(&plan, self.verbose);
             sp.finish_and_clear();
             let id = r?;
-            println!(
-                "  {} Deployed {} to {} on {target}",
-                style::ok(),
-                style::accent(&plan.channel),
-                style::bold(&id)
+            components::print_notice(
+                components::NoticeLevel::Success,
+                &format!("Deployed {} to {target}", plan.channel),
+                &format!(
+                    "{}\n{}",
+                    components::explorer_address_link(&id, cluster),
+                    id
+                ),
             );
-            println!();
         }
         Ok(())
     }

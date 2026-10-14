@@ -6,7 +6,7 @@ use solex_core::{
     scan::{self, Cell},
 };
 
-use crate::{boxed, commands, style};
+use crate::{commands, components, components::boxed, style};
 
 #[derive(Args, Debug, Default)]
 pub struct FeaturesCommand {
@@ -106,45 +106,40 @@ impl FeaturesCommand {
         }
 
         if self.check {
-            let mut problems = 0;
+            let mut problems: Vec<String> = Vec::new();
             for (tag, item) in &unknown {
-                eprintln!(
-                    "{} `{tag}` on {} {} ({}:{}) is not a channel; the item ships nowhere",
-                    style::fail(),
+                problems.push(format!(
+                    "`{tag}` on {} {} ({}:{}) is not a channel; the item ships nowhere",
                     item.kind,
                     item.name,
                     item.file.display(),
                     item.line
-                );
-                problems += 1;
+                ));
             }
             for f in &undeclared {
-                eprintln!(
-                    "{} feature `{f}` is in the manifest but not in {} [features]",
-                    style::fail(),
+                problems.push(format!(
+                    "feature `{f}` is in the manifest but not in {} [features]",
                     project.program_manifest().display()
-                );
-                problems += 1;
+                ));
             }
             for f in &unused {
-                eprintln!(
-                    "{} feature `{f}` is declared but no #[cfg(feature = \"{f}\")] uses it",
-                    style::fail()
-                );
-                problems += 1;
+                problems.push(format!(
+                    "feature `{f}` is declared but no #[cfg(feature = \"{f}\")] uses it"
+                ));
             }
             if !untracked.is_empty() {
-                eprintln!(
-                    "{} build.rs does not declare rerun-if-env-changed for {}",
-                    style::fail(),
+                problems.push(format!(
+                    "build.rs does not declare rerun-if-env-changed for {}",
                     untracked.join(", ")
-                );
-                problems += 1;
+                ));
             }
-            if problems > 0 {
-                return Err(CoreError::message(format!(
-                    "{problems} problem(s) in channel gating"
-                )));
+            if !problems.is_empty() {
+                components::print_notice(
+                    components::NoticeLevel::Error,
+                    &format!("{} problem(s) in channel gating", problems.len()),
+                    &problems.join("\n"),
+                );
+                return Err(CoreError::message("solex features --check failed"));
             }
         }
         Ok(())
