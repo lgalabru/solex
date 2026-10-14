@@ -102,7 +102,7 @@ pub fn section(head: &[Line], right: Line, fields: &[(&str, Line)]) -> Vec<Line>
         if value.0.is_empty() {
             continue;
         }
-        if value.1 + FIELD_LABEL + 1 <= INNER {
+        if value.1 + FIELD_LABEL < INNER {
             lines.push(field(label, value.clone()));
         } else {
             // Values that cannot fit (paths) are plain text: wrap them.

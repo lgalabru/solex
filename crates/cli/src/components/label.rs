@@ -20,6 +20,13 @@ pub fn short(id: &str) -> String {
     format!("{head}…{tail}")
 }
 
+/// A path shown relative to `root` when it lives under it.
+pub fn rel(root: &std::path::Path, path: &std::path::Path) -> String {
+    path.strip_prefix(root)
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| path.display().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -30,11 +37,4 @@ mod tests {
         );
         assert_eq!(super::short("devnet"), "devnet");
     }
-}
-
-/// A path shown relative to `root` when it lives under it.
-pub fn rel(root: &std::path::Path, path: &std::path::Path) -> String {
-    path.strip_prefix(root)
-        .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| path.display().to_string())
 }
