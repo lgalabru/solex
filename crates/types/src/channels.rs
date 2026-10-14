@@ -100,8 +100,35 @@ impl<'de> Deserialize<'de> for Clusters {
 /// program_id = "..."
 /// vars = { treasury = "..." }
 /// ```
+/// Fields a cluster may override within a channel, written as
+/// `[channels.<channel>.<cluster>]`. Anything not set here is inherited.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
+pub struct ClusterOverride {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keypair: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upgrade_authority: Option<PathBuf>,
+    /// Merged over the channel's `vars`.
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub vars: IndexMap<String, String>,
+}
+
+/// A channel's effective settings for one cluster: the channel's values with
+/// that cluster's override applied.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Resolved<'a> {
+    pub channel: &'a str,
+    pub cluster: Option<&'a str>,
+    pub program_id: Option<&'a str>,
+    pub keypair: Option<&'a PathBuf>,
+    pub upgrade_authority: Option<&'a PathBuf>,
+    pub vars: IndexMap<&'a str, &'a str>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Channel {
     /// Address the program is deployed at on this channel.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -125,12 +152,16 @@ pub struct Channel {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Per-channel constants read by `solex::var!("name")` at compile time:
-    /// (see [`Channel::is_deployable`] for channels that only name a tag set)
     /// treasury owners, fee accounts, admin keys, anything that differs per
     /// deployment. Missing a var on the active channel is a compile error, so
     /// placeholders cannot leak into a real deployment.
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub vars: IndexMap<String, String>,
+    /// Per-cluster overrides, keyed by a name from `cluster`:
+    /// `[channels.stable.devnet] vars = { ... }`. Any other key here is a
+    /// manifest error, which is what catches a misspelled field.
+    #[serde(default, flatten, skip_serializing_if = "IndexMap::is_empty")]
+    pub overrides: IndexMap<String, ClusterOverride>,
 }
 
 /// The `solex` configuration section: the only part a host manifest needs.
@@ -170,6 +201,15 @@ impl Channels {
         for (name, channel) in &self.channels {
             if !is_valid_channel_name(name) {
                 return Err(Error::InvalidChannelName(name.clone()));
+            }
+            for key in channel.overrides.keys() {
+                if !channel.cluster.0.iter().any(|c| c == key) {
+                    return Err(Error::UnknownOverride {
+                        channel: name.clone(),
+                        key: key.clone(),
+                        declared: channel.cluster.0.clone(),
+                    });
+                }
             }
             for inc in &channel.includes {
                 if !self.channels.contains_key(inc) {
@@ -288,7 +328,68 @@ impl Channel {
     /// Whether this channel is something to build and deploy, as opposed to a
     /// tag-only channel that exists for others to include.
     pub fn is_deployable(&self) -> bool {
-        self.program_id.is_some()
+        self.program_id.is_some() || self.overrides.values().any(|o| o.program_id.is_some())
+    }
+
+    /// Whether any cluster changes something the compiler sees, in which case
+    /// each cluster is its own build.
+    pub fn has_overrides(&self) -> bool {
+        !self.overrides.is_empty()
+    }
+
+    /// Pick the cluster a build or deploy targets. Explicit choice, else
+    /// `SOLEX_CLUSTER`, else the only cluster, else none when the channel has
+    /// no overrides (every cluster gets the same bytes). Several clusters with
+    /// overrides and no choice is an error: the artifact would be ambiguous.
+    pub fn resolve_cluster(&self, name: &str, requested: Option<&str>) -> Result<Option<String>> {
+        if let Some(r) = requested {
+            return Ok(Some(self.cluster.select(Some(r))?.remove(0)));
+        }
+        if let Ok(env) = std::env::var(crate::CLUSTER_ENV) {
+            let env = env.trim();
+            if !env.is_empty() {
+                return Ok(Some(self.cluster.select(Some(env))?.remove(0)));
+            }
+        }
+        if let Some(one) = self.cluster.single() {
+            return Ok(Some(one.to_string()));
+        }
+        if self.cluster.is_empty() || !self.has_overrides() {
+            return Ok(None);
+        }
+        Err(Error::ClusterRequired {
+            channel: name.to_string(),
+            declared: self.cluster.0.clone(),
+        })
+    }
+
+    /// Effective settings for `cluster` (or the channel's own when `None`).
+    pub fn resolved<'a>(&'a self, name: &'a str, cluster: Option<&'a str>) -> Resolved<'a> {
+        let over = cluster.and_then(|c| self.overrides.get(c));
+        let mut vars: IndexMap<&str, &str> = self
+            .vars
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        if let Some(o) = over {
+            for (k, v) in &o.vars {
+                vars.insert(k.as_str(), v.as_str());
+            }
+        }
+        Resolved {
+            channel: name,
+            cluster,
+            program_id: over
+                .and_then(|o| o.program_id.as_deref())
+                .or(self.program_id.as_deref()),
+            keypair: over
+                .and_then(|o| o.keypair.as_ref())
+                .or(self.keypair.as_ref()),
+            upgrade_authority: over
+                .and_then(|o| o.upgrade_authority.as_ref())
+                .or(self.upgrade_authority.as_ref()),
+            vars,
+        }
     }
 }
 
@@ -374,6 +475,52 @@ mod tests {
         let mut c = sample();
         c.channels.insert("Bad".into(), Channel::default());
         assert!(matches!(c.validate(), Err(Error::InvalidChannelName(_))));
+    }
+
+    #[test]
+    fn cluster_overrides_merge_and_validate() {
+        let mut c = sample();
+        let stable = c.channels.get_mut("stable").unwrap();
+        stable.cluster = Clusters(vec!["mainnet-beta".into(), "devnet".into()]);
+        stable.vars.insert("treasury".into(), "main".into());
+        stable.vars.insert("fee".into(), "shared".into());
+        stable.overrides.insert(
+            "devnet".into(),
+            ClusterOverride {
+                program_id: Some("9".into()),
+                vars: IndexMap::from([("treasury".to_string(), "dev".to_string())]),
+                ..Default::default()
+            },
+        );
+        c.validate().unwrap();
+        let ch = c.channel("stable").unwrap();
+        let main = ch.resolved("stable", Some("mainnet-beta"));
+        assert_eq!(main.program_id, Some("1"));
+        assert_eq!(main.vars["treasury"], "main");
+        let dev = ch.resolved("stable", Some("devnet"));
+        assert_eq!(dev.program_id, Some("9"));
+        assert_eq!(dev.vars["treasury"], "dev");
+        assert_eq!(dev.vars["fee"], "shared");
+        // Two clusters with overrides and no pick is ambiguous.
+        if std::env::var(crate::CLUSTER_ENV).is_err() {
+            assert!(matches!(
+                ch.resolve_cluster("stable", None),
+                Err(Error::ClusterRequired { .. })
+            ));
+        }
+        assert_eq!(
+            ch.resolve_cluster("stable", Some("devnet"))
+                .unwrap()
+                .as_deref(),
+            Some("devnet")
+        );
+        // An override for an undeclared cluster is a manifest error.
+        c.channels
+            .get_mut("stable")
+            .unwrap()
+            .overrides
+            .insert("testnet".into(), ClusterOverride::default());
+        assert!(matches!(c.validate(), Err(Error::UnknownOverride { .. })));
     }
 
     #[test]

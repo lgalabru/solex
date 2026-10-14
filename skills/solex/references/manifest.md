@@ -35,8 +35,14 @@ vars = { treasury_owner = "DoWeHaveAPlaceholder1111111111111111111111" }
 
 Fields per channel: `program_id` (required to build; a channel without one is
 tag-only and exists for others to `include`), `cluster` (moniker or RPC URL,
-or a list for identical deployments), `keypair` (first deploy only),
-`upgrade_authority`, `includes`, `vars`, `description`.
+or a list), `keypair` (first deploy only), `upgrade_authority`, `includes`,
+`vars`, `description`.
+
+Per-cluster overrides, `[channels.<channel>.<cluster>]`, may set `program_id`,
+`keypair`, `upgrade_authority` and `vars` (merged over the channel's). The
+key must be one of the channel's clusters. With overrides, the channel builds
+once per cluster and `SOLEX_CLUSTER` reaches the macros; `solex::active_cluster!()`
+exposes it.
 
 ## Embedded in a host manifest
 

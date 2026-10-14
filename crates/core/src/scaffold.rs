@@ -97,6 +97,7 @@ pub fn init(parent: &Path, opts: &InitOptions) -> Result<Created> {
                 },
                 description: None,
                 vars: IndexMap::new(),
+                overrides: IndexMap::new(),
             },
         );
     }
@@ -218,6 +219,7 @@ fn build_rs(manifest_file: &str) -> String {
     // Solex macros read the channel at expansion time; rebuild when it changes.
     println!("cargo:rerun-if-env-changed=SOLEX_CHANNEL");
     println!("cargo:rerun-if-env-changed=SOLEX_MANIFEST");
+    println!("cargo:rerun-if-env-changed=SOLEX_CLUSTER");
     println!("cargo:rerun-if-changed={manifest_file}");
 }}
 "#

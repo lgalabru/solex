@@ -31,7 +31,9 @@
 #[cfg(not(any(feature = "anchor", feature = "pinocchio", feature = "native")))]
 compile_error!("solex: enable one of the `anchor` (default), `pinocchio` or `native` features");
 
-pub use solex_macros::{active_channel, channel, declare_id, gated, program, ships, var};
+pub use solex_macros::{
+    active_channel, active_cluster, channel, declare_id, gated, program, ships, var,
+};
 
 #[cfg(feature = "anchor")]
 pub use anchor_lang;

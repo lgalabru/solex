@@ -22,10 +22,10 @@ mod manifest;
 #[cfg(feature = "spec")]
 pub mod spec;
 
-pub use channels::{Channel, Channels, Clusters, is_valid_channel_name};
+pub use channels::{Channel, Channels, ClusterOverride, Clusters, Resolved, is_valid_channel_name};
 pub use manifest::{
-    BuildConfig, CHANNEL_ENV, Format, HOST_FILES, Loaded, MANIFEST_ENV, MANIFEST_FILES, Manifest,
-    SECTION_KEY, Source, discover, find, load, parse, to_string,
+    BuildConfig, CHANNEL_ENV, CLUSTER_ENV, Format, HOST_FILES, Loaded, MANIFEST_ENV,
+    MANIFEST_FILES, Manifest, SECTION_KEY, Source, discover, find, load, parse, to_string,
 };
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -73,6 +73,25 @@ pub enum Error {
     #[error("cluster `{cluster}` is not declared for this channel (declared: {})", declared.join(", "))]
     UnknownCluster {
         cluster: String,
+        declared: Vec<String>,
+    },
+    #[error(
+        "channel `{channel}` has per-cluster overrides for {}; pass --cluster or set {CLUSTER_ENV} to \
+         pick which one to build",
+        declared.join(", ")
+    )]
+    ClusterRequired {
+        channel: String,
+        declared: Vec<String>,
+    },
+    #[error(
+        "channel `{channel}`: `{key}` is neither a channel field nor one of its clusters ({}); \
+         per-cluster overrides are written as [channels.{channel}.<cluster>]",
+        if declared.is_empty() { "none declared".to_string() } else { declared.join(", ") }
+    )]
+    UnknownOverride {
+        channel: String,
+        key: String,
         declared: Vec<String>,
     },
     #[error("invalid channel name `{0}`: use lowercase letters, digits, `-` or `_`")]

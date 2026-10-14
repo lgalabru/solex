@@ -70,10 +70,7 @@ pub fn plans(project: &Project, channel: &str, opts: &DeployOptions) -> Result<V
 /// Validate everything needed for a deploy without touching the network.
 pub fn plan(project: &Project, channel: &str, opts: &DeployOptions) -> Result<DeployPlan> {
     let ch = project.channels().channel(channel)?;
-    let cluster = match opts.url.clone() {
-        Some(u) => Some(ch.cluster.select(Some(&u))?.remove(0)),
-        None => ch.cluster.single().map(str::to_string),
-    };
+    let cluster = ch.resolve_cluster(channel, opts.url.as_deref())?;
     plan_for(project, channel, cluster, opts)
 }
 
@@ -85,18 +82,22 @@ fn plan_for(
 ) -> Result<DeployPlan> {
     let channels = project.channels();
     let ch = channels.channel(channel)?;
-    let program_id = channels.program_id(channel)?.to_string();
+    let resolved = ch.resolved(channel, cluster.as_deref());
+    let program_id = resolved
+        .program_id
+        .ok_or_else(|| CoreError::message(format!("channel `{channel}` has no program_id")))?
+        .to_string();
     keys::validate_pubkey(&program_id).map_err(|reason| {
         CoreError::message(format!(
             "channel `{channel}` has an invalid program_id `{program_id}`: {reason}"
         ))
     })?;
 
-    let so_path = build::find_so(&project.channel_out_dir(channel))?;
+    let so_path = build::find_so(&project.target_out_dir(channel, cluster.as_deref()))?;
 
     // Use the keypair when it exists and matches; otherwise deploy by id so
     // upgrades work on machines that never held the program keypair.
-    let keypair_path = project.channel_keypair(channel)?;
+    let keypair_path = project.target_keypair(channel, cluster.as_deref())?;
     let program_keypair = if keypair_path.is_file() {
         let actual = keys::pubkey_of(&keypair_path)?;
         if actual != program_id {

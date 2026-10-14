@@ -6,6 +6,7 @@ use pinocchio::{AccountView, Address, ProgramResult, error::ProgramError};
 solex::declare_id!();
 
 pub const TREASURY_OWNER: &str = solex::var!("treasury_owner");
+pub const CLUSTER: &str = solex::active_cluster!();
 
 #[solex::gated]
 #[repr(u8)]

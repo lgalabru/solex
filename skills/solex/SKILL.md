@@ -36,10 +36,12 @@ as one diff each. The stable artifact stays small.
 - Tag by maturity (`stable`, `nightly`, `canary`), not by cluster. Clusters are
   channel properties in the manifest. A channel `includes` the channels whose
   tags it also ships, so `nightly` typically `includes = ["stable"]`.
-- One channel is one artifact. `cluster = ["mainnet-beta", "testnet"]` deploys
-  identical bytes to both. If `program_id` or any `vars` differ per cluster,
-  make separate channels and share the surface through a tag-only channel (no
-  `program_id`) that they both `include`.
+- `cluster = ["mainnet-beta", "devnet"]` deploys one channel to several
+  clusters. When a cluster needs its own `program_id` or `vars`, add
+  `[channels.<channel>.<cluster>]` with just the fields that differ; the
+  channel then builds once per cluster (`target/solex/<channel>/<cluster>/`)
+  and every command accepts `--cluster` to pick one. Tag-only channels (no
+  `program_id`) exist to be `include`d and are never built.
 - Untagged code is the stable surface. Tag only what is new or experimental.
 - Gate the public surface: instruction variants, dispatch arms, handlers,
   accounts structs, new account types, new error variants. Do not gate

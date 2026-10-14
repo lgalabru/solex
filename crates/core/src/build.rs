@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use solex_types::{CHANNEL_ENV, MANIFEST_ENV};
+use solex_types::{CHANNEL_ENV, CLUSTER_ENV, MANIFEST_ENV};
 
 use crate::{CoreError, Project, Result};
 
@@ -25,11 +25,15 @@ pub struct BuildOptions {
     /// Arguments appended to `cargo build-sbf` after the manifest's
     /// `build_args` (for example `--arch v3`).
     pub extra_args: Vec<String>,
+    /// Cluster within the channel; required when the channel has per-cluster
+    /// overrides and several clusters.
+    pub cluster: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct BuildOutput {
     pub channel: String,
+    pub cluster: Option<String>,
     pub program_id: String,
     pub so_path: PathBuf,
     pub size: u64,
@@ -41,13 +45,39 @@ pub struct BuildOutput {
 /// Framework CLIs with their own build pipeline apply these to their
 /// `cargo build-sbf` invocation instead of calling [`build`].
 pub fn channel_env(project: &Project, channel: &str) -> Vec<(&'static str, String)> {
-    vec![
+    target_env(project, channel, None)
+}
+
+/// [`channel_env`] plus `SOLEX_CLUSTER` when a cluster is pinned.
+pub fn target_env(
+    project: &Project,
+    channel: &str,
+    cluster: Option<&str>,
+) -> Vec<(&'static str, String)> {
+    let mut env = vec![
         (CHANNEL_ENV, channel.to_string()),
         (
             MANIFEST_ENV,
             project.manifest_path().to_string_lossy().into_owned(),
         ),
-    ]
+    ];
+    if let Some(c) = cluster {
+        env.push((CLUSTER_ENV, c.to_string()));
+    }
+    env
+}
+
+/// The cluster a build targets, resolved from options, `SOLEX_CLUSTER` and the
+/// manifest.
+pub fn resolve_cluster(
+    project: &Project,
+    channel: &str,
+    opts: &BuildOptions,
+) -> Result<Option<String>> {
+    Ok(project
+        .channels()
+        .channel(channel)?
+        .resolve_cluster(channel, opts.cluster.as_deref())?)
 }
 
 /// The command that would run, for `--dry-run` and verbose output.
@@ -58,7 +88,8 @@ pub fn channel_env(project: &Project, channel: &str) -> Vec<(&'static str, Strin
 /// the environment and the manifest's `args`.
 pub fn build_command(project: &Project, channel: &str, opts: &BuildOptions) -> Command {
     let cfg = &project.manifest().build;
-    let out_dir = project.channel_out_dir(channel);
+    let cluster = resolve_cluster(project, channel, opts).ok().flatten();
+    let out_dir = project.target_out_dir(channel, cluster.as_deref());
     let mut cmd = if cfg.is_build_sbf() {
         let mut cmd = Command::new("cargo");
         cmd.arg("build-sbf")
@@ -86,7 +117,7 @@ pub fn build_command(project: &Project, channel: &str, opts: &BuildOptions) -> C
     };
     cmd.args(&cfg.args);
     cmd.args(&opts.extra_args);
-    cmd.envs(channel_env(project, channel))
+    cmd.envs(target_env(project, channel, cluster.as_deref()))
         .current_dir(project.program_dir());
     cmd
 }
@@ -103,8 +134,14 @@ pub fn artifact_path(project: &Project, channel: &str) -> Option<PathBuf> {
 }
 
 pub fn build(project: &Project, channel: &str, opts: &BuildOptions) -> Result<BuildOutput> {
-    let program_id = project.channels().program_id(channel)?.to_string();
-    let out_dir = project.channel_out_dir(channel);
+    let cluster = resolve_cluster(project, channel, opts)?;
+    let ch = project.channels().channel(channel)?;
+    let program_id = ch
+        .resolved(channel, cluster.as_deref())
+        .program_id
+        .ok_or_else(|| CoreError::message(format!("channel `{channel}` has no program_id")))?
+        .to_string();
+    let out_dir = project.target_out_dir(channel, cluster.as_deref());
     std::fs::create_dir_all(&out_dir).map_err(|e| CoreError::io("create", &out_dir, e))?;
 
     let cfg = &project.manifest().build;
@@ -137,6 +174,7 @@ pub fn build(project: &Project, channel: &str, opts: &BuildOptions) -> Result<Bu
         .map_err(|e| CoreError::io("stat", &so_path, e))?;
     Ok(BuildOutput {
         channel: channel.to_string(),
+        cluster,
         program_id,
         so_path,
         size,

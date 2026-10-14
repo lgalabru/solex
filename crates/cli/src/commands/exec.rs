@@ -13,6 +13,10 @@ pub struct ExecCommand {
     #[arg(long, short)]
     pub channel: Option<String>,
 
+    /// Cluster within the channel (needed when it has per-cluster overrides)
+    #[arg(long)]
+    pub cluster: Option<String>,
+
     /// Path to the manifest
     #[arg(long)]
     pub manifest: Option<PathBuf>,
@@ -26,9 +30,13 @@ impl ExecCommand {
     pub fn execute(&self) -> Result<()> {
         let project = commands::load_project(self.manifest.as_deref())?;
         let channel = project.channels().resolve(self.channel.as_deref())?;
+        let cluster = project
+            .channels()
+            .channel(&channel)?
+            .resolve_cluster(&channel, self.cluster.as_deref())?;
         let mut cmd = Command::new(&self.command[0]);
         cmd.args(&self.command[1..])
-            .envs(build::channel_env(&project, &channel))
+            .envs(build::target_env(&project, &channel, cluster.as_deref()))
             .current_dir(project.program_dir());
         let status = cmd.status().map_err(|source| CoreError::Spawn {
             program: self.command[0].clone(),

@@ -310,7 +310,7 @@ dependencies = [
 
 [[package]]
 name = "solex-lang"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "pinocchio",
  "solana-address",
@@ -319,7 +319,7 @@ dependencies = [
 
 [[package]]
 name = "solex-macros"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bs58",
  "proc-macro2",
@@ -338,7 +338,7 @@ dependencies = [
 
 [[package]]
 name = "solex-types"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "indexmap",
  "proc-macro2",

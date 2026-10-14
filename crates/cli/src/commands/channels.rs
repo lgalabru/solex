@@ -34,6 +34,7 @@ impl ChannelsCommand {
                         "cluster": ch.cluster,
                         "includes": ch.includes,
                         "vars": ch.vars,
+                        "overrides": ch.overrides,
                         "ships": tags,
                         "default": active.as_deref() == Some(name.as_str()),
                     }),
@@ -87,6 +88,17 @@ impl ChannelsCommand {
             println!("      {:<10} {}", style::dim("ships"), tags.join(", "));
             for (k, v) in &ch.vars {
                 println!("      {:<10} {k} = {v}", style::dim("var"));
+            }
+            for (cluster, o) in &ch.overrides {
+                if let Some(id) = &o.program_id {
+                    println!(
+                        "      {:<10} {cluster}: program {id}",
+                        style::dim("override")
+                    );
+                }
+                for (k, v) in &o.vars {
+                    println!("      {:<10} {cluster}: {k} = {v}", style::dim("override"));
+                }
             }
             if let Some(d) = &ch.description {
                 println!("      {:<10} {}", style::dim("about"), d);

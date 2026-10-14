@@ -18,6 +18,11 @@ pub struct BuildCommand {
     #[arg(long, conflicts_with = "channel")]
     pub all: bool,
 
+    /// Cluster within the channel; a channel with per-cluster overrides
+    /// builds every cluster unless one is given
+    #[arg(long)]
+    pub cluster: Option<String>,
+
     /// Cargo features to enable (comma-separated or repeated)
     #[arg(long, value_delimiter = ',')]
     pub features: Vec<String>,
@@ -58,30 +63,54 @@ impl BuildCommand {
             debug: self.debug,
             tools_version: self.tools_version.clone(),
             extra_args: self.sbf_args.clone(),
+            cluster: None,
         };
 
         for channel in &channels {
-            let cmd = build::build_command(&project, channel, &opts);
-            if self.dry_run {
-                println!("{}", build::display_command(&cmd));
-                continue;
+            // One build per cluster when overrides make the artifacts differ.
+            let ch = project.channels().channel(channel)?;
+            let targets: Vec<Option<String>> = match &self.cluster {
+                Some(c) => vec![Some(c.clone())],
+                None if ch.has_overrides() && ch.cluster.single().is_none() => {
+                    ch.cluster.iter().map(|c| Some(c.to_string())).collect()
+                }
+                None => vec![None],
+            };
+            for cluster in targets {
+                let opts = BuildOptions {
+                    cluster,
+                    ..opts.clone()
+                };
+                let cmd = build::build_command(&project, channel, &opts);
+                if self.dry_run {
+                    println!("{}", build::display_command(&cmd));
+                    continue;
+                }
+                if self.verbose {
+                    eprintln!("  {}", style::dim(&build::display_command(&cmd)));
+                }
+                let label = match &opts.cluster {
+                    Some(c) => format!("{channel} ({c})"),
+                    None => channel.clone(),
+                };
+                let sp = style::spinner(&format!("Building {}...", style::accent(&label)));
+                let result = build::build(&project, channel, &opts);
+                sp.finish_and_clear();
+                let out = result?;
+                let shown = match &out.cluster {
+                    Some(c) if ch.has_overrides() => format!("{}/{c}", out.channel),
+                    _ => out.channel.clone(),
+                };
+                println!(
+                    "  {} {} {} {} {}",
+                    style::ok(),
+                    style::pad_then(&shown, 10, style::accent),
+                    style::dim(&out.program_id),
+                    style::dim(&style::human_size(out.size)),
+                    style::dim(&style::human_duration(out.elapsed)),
+                );
+                println!("    {}", style::dim(&out.so_path.display().to_string()));
             }
-            if self.verbose {
-                eprintln!("  {}", style::dim(&build::display_command(&cmd)));
-            }
-            let sp = style::spinner(&format!("Building {}...", style::accent(channel)));
-            let result = build::build(&project, channel, &opts);
-            sp.finish_and_clear();
-            let out = result?;
-            println!(
-                "  {} {} {} {} {}",
-                style::ok(),
-                style::pad_then(&out.channel, 10, style::accent),
-                style::dim(&out.program_id),
-                style::dim(&style::human_size(out.size)),
-                style::dim(&style::human_duration(out.elapsed)),
-            );
-            println!("    {}", style::dim(&out.so_path.display().to_string()));
         }
         Ok(())
     }

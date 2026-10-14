@@ -105,9 +105,19 @@ impl Project {
             .unwrap_or_else(|| "program".into())
     }
 
-    /// Where `solex build` puts artifacts for a channel.
+    /// Where `solex build` puts artifacts for a channel. A channel with
+    /// per-cluster overrides produces one artifact per cluster, in a
+    /// subdirectory named after the cluster.
     pub fn channel_out_dir(&self, channel: &str) -> PathBuf {
         self.root().join("target").join("solex").join(channel)
+    }
+
+    pub fn target_out_dir(&self, channel: &str, cluster: Option<&str>) -> PathBuf {
+        let base = self.channel_out_dir(channel);
+        match (cluster, self.channels().channel(channel)) {
+            (Some(c), Ok(ch)) if ch.has_overrides() => base.join(c),
+            _ => base,
+        }
     }
 
     /// Resolve a path from the manifest relative to the project root, expanding
@@ -123,8 +133,13 @@ impl Project {
 
     /// Keypair path for a channel, defaulting to `keys/<channel>.json`.
     pub fn channel_keypair(&self, channel: &str) -> Result<PathBuf> {
+        self.target_keypair(channel, None)
+    }
+
+    /// Keypair path for a channel on one cluster, honoring an override.
+    pub fn target_keypair(&self, channel: &str, cluster: Option<&str>) -> Result<PathBuf> {
         let ch = self.channels().channel(channel)?;
-        Ok(match &ch.keypair {
+        Ok(match ch.resolved(channel, cluster).keypair {
             Some(p) => self.resolve_path(p),
             None => self.root().join("keys").join(format!("{channel}.json")),
         })

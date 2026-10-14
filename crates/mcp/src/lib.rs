@@ -84,6 +84,9 @@ pub struct BuildParams {
     /// Return the cargo build-sbf command instead of running it.
     #[serde(default)]
     pub dry_run: bool,
+    /// Cluster within the channel, for channels with per-cluster overrides.
+    #[serde(default)]
+    pub cluster: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -93,6 +96,9 @@ pub struct DeployPlanParams {
     /// Channel to plan a deploy for.
     #[serde(default)]
     pub channel: Option<String>,
+    /// One of the channel's clusters; defaults to all of them.
+    #[serde(default)]
+    pub cluster: Option<String>,
 }
 
 type ToolResult = Result<CallToolResult, ErrorData>;
@@ -232,7 +238,10 @@ impl SolexMcp {
             Ok(c) => c,
             Err(e) => return fail(e.to_string()),
         };
-        let opts = BuildOptions::default();
+        let opts = BuildOptions {
+            cluster: p.cluster.clone(),
+            ..Default::default()
+        };
         if p.dry_run {
             let cmd = build::build_command(&project, &channel, &opts);
             return json(serde_json::json!({
@@ -247,6 +256,7 @@ impl SolexMcp {
         match result {
             Ok(out) => json(serde_json::json!({
                 "channel": out.channel,
+                "cluster": out.cluster,
                 "program_id": out.program_id,
                 "artifact": out.so_path,
                 "size_bytes": out.size,
@@ -268,16 +278,27 @@ impl SolexMcp {
             Ok(c) => c,
             Err(e) => return fail(e.to_string()),
         };
-        match deploy::plan(&project, &channel, &deploy::DeployOptions::default()) {
-            Ok(plan) => json(serde_json::json!({
-                "channel": plan.channel,
-                "program_id": plan.program_id,
-                "cluster": plan.cluster,
-                "artifact": plan.so_path,
-                "program_keypair": plan.program_keypair,
-                "upgrade_authority": plan.upgrade_authority,
-                "command": build::display_command(&plan.command()),
-            })),
+        let opts = deploy::DeployOptions {
+            url: p.cluster.clone(),
+            ..Default::default()
+        };
+        match deploy::plans(&project, &channel, &opts) {
+            Ok(plans) => json(serde_json::json!(
+                plans
+                    .iter()
+                    .map(|plan| {
+                        serde_json::json!({
+                            "channel": plan.channel,
+                            "program_id": plan.program_id,
+                            "cluster": plan.cluster,
+                            "artifact": plan.so_path,
+                            "program_keypair": plan.program_keypair,
+                            "upgrade_authority": plan.upgrade_authority,
+                            "command": build::display_command(&plan.command()),
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            )),
             Err(e) => fail(e.to_string()),
         }
     }

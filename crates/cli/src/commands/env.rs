@@ -13,6 +13,10 @@ pub struct EnvCommand {
     #[arg(long, short)]
     pub channel: Option<String>,
 
+    /// Cluster within the channel (needed when it has per-cluster overrides)
+    #[arg(long)]
+    pub cluster: Option<String>,
+
     /// Output format
     #[arg(long, value_enum, default_value_t = EnvFormat::Shell)]
     pub format: EnvFormat,
@@ -37,7 +41,11 @@ impl EnvCommand {
     pub fn execute(&self) -> Result<()> {
         let project = commands::load_project(self.manifest.as_deref())?;
         let channel = project.channels().resolve(self.channel.as_deref())?;
-        let env = build::channel_env(&project, &channel);
+        let cluster = project
+            .channels()
+            .channel(&channel)?
+            .resolve_cluster(&channel, self.cluster.as_deref())?;
+        let env = build::target_env(&project, &channel, cluster.as_deref());
         match self.format {
             EnvFormat::Shell => {
                 for (k, v) in env {

@@ -193,27 +193,24 @@ const TREASURY_OWNER: [u8; 32] = decode_pubkey(solex::var!("treasury_owner"));
 
 A channel without the var fails to compile, so a placeholder can never reach a real cluster.
 
-### One surface, several deployments
+### One channel, several clusters
 
-`cluster` takes a list when the same artifact goes to several clusters unchanged. When deployments differ in `program_id` or `vars`, they are separate channels; a channel without `program_id` is a tag-only channel that names the shared surface and is never built:
+`cluster` takes a list. Identical bytes go to every cluster unless a cluster overrides something, written as `[channels.<channel>.<cluster>]`:
 
 ```toml
-[channels.stable]                 # tag only: what #[channel(stable)] means
-
-[channels.mainnet]
-includes = ["stable"]
+[channels.stable]
 program_id = "CHNLxYvV…"
-cluster = ["mainnet-beta", "testnet"]   # identical bytes on both
+cluster = ["mainnet-beta", "devnet"]
 vars = { treasury_owner = "Cs2zdf…" }
 
-[channels.devnet]
-includes = ["stable"]
+[channels.stable.devnet]               # inherits everything else
 program_id = "CHNLxBtX…"
-cluster = "devnet"
 vars = { treasury_owner = "4zTeC5…" }
 ```
 
-`solex deploy --channel mainnet` deploys to both clusters; `--cluster testnet` picks one. `solex build --all` skips tag-only channels.
+Because `var!` and `declare_id!` resolve at compile time, a channel with overrides is one artifact per cluster: `solex build --channel stable` builds `target/solex/stable/mainnet-beta/` and `target/solex/stable/devnet/`, each with `SOLEX_CLUSTER` set, and `solex deploy` sends each to its cluster. `--cluster` narrows any command to one. A build that cannot tell which cluster it is for fails instead of guessing. An override key that is not a declared cluster is a manifest error, so a misspelled field cannot pass as an override.
+
+A channel without `program_id` is tag-only: it names a surface for other channels to `include` and is never built; `--all` skips it.
 
 ## Build pipelines
 

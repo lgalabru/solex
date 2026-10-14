@@ -80,6 +80,13 @@ pub fn var(input: TokenStream) -> TokenStream {
     expand::var(input.into()).into()
 }
 
+/// Expands to the active cluster within the channel as a `&'static str`, or
+/// `""` when the channel deploys identical bytes everywhere.
+#[proc_macro]
+pub fn active_cluster(input: TokenStream) -> TokenStream {
+    expand::active_cluster(input.into()).into()
+}
+
 /// Expands to a `bool` literal: whether the active channel ships `tag`.
 ///
 /// ```ignore

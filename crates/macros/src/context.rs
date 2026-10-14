@@ -9,6 +9,8 @@ use solex_types::{CHANNEL_ENV, Loaded, MANIFEST_ENV};
 pub struct BuildContext {
     pub loaded: Loaded,
     pub channel: String,
+    /// Cluster within the channel when the manifest or `SOLEX_CLUSTER` picks one.
+    pub cluster: Option<String>,
     pub tags: BTreeSet<String>,
 }
 
@@ -39,9 +41,20 @@ impl BuildContext {
             .channels()
             .tags(&channel)
             .map_err(|e| syn::Error::new(span, format!("solex: {e}")))?;
+        let cluster = loaded
+            .channels()
+            .channel(&channel)
+            .and_then(|ch| ch.resolve_cluster(&channel, None))
+            .map_err(|e| {
+                syn::Error::new(
+                    span,
+                    format!("solex: {e}\n\nBuild with `solex build --channel {channel} --cluster <name>`."),
+                )
+            })?;
         Ok(Self {
             loaded,
             channel,
+            cluster,
             tags,
         })
     }
@@ -52,13 +65,16 @@ impl BuildContext {
         let channel = channels
             .channel(&self.channel)
             .map_err(|e| syn::Error::new(span, format!("solex: {e}")))?;
-        if let Some(v) = channel.vars.get(name) {
-            return Ok(v.clone());
+        let resolved = channel.resolved(&self.channel, self.cluster.as_deref());
+        if let Some(v) = resolved.vars.get(name) {
+            return Ok((*v).to_string());
         }
         let defined_on: Vec<&str> = channels
             .channels
             .iter()
-            .filter(|(_, c)| c.vars.contains_key(name))
+            .filter(|(_, c)| {
+                c.vars.contains_key(name) || c.overrides.values().any(|o| o.vars.contains_key(name))
+            })
             .map(|(n, _)| n.as_str())
             .collect();
         let hint = if defined_on.is_empty() {
@@ -69,20 +85,32 @@ impl BuildContext {
         Err(syn::Error::new(
             span,
             format!(
-                "solex: channel `{}` has no var `{name}` ({hint}); add it under `vars` for \
+                "solex: channel `{}`{} has no var `{name}` ({hint}); add it under `vars` for \
                  that channel in {}",
                 self.channel,
+                self.cluster
+                    .as_deref()
+                    .map(|c| format!(" (cluster {c})"))
+                    .unwrap_or_default(),
                 self.loaded.path.display()
             ),
         ))
     }
 
     pub fn program_id(&self, span: Span) -> syn::Result<String> {
-        let id = self
-            .loaded
-            .channels()
-            .program_id(&self.channel)
+        let channels = self.loaded.channels();
+        let channel = channels
+            .channel(&self.channel)
             .map_err(|e| syn::Error::new(span, format!("solex: {e}")))?;
+        let id = channel
+            .resolved(&self.channel, self.cluster.as_deref())
+            .program_id
+            .ok_or_else(|| {
+                syn::Error::new(
+                    span,
+                    format!("solex: channel `{}` has no `program_id`", self.channel),
+                )
+            })?;
         validate_pubkey(id).map_err(|msg| {
             syn::Error::new(
                 span,

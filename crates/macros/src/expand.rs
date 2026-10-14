@@ -250,6 +250,22 @@ pub fn active_channel(input: TokenStream) -> TokenStream {
     quote!(#lit)
 }
 
+/// Active cluster name, or `""` when the channel does not pin one.
+pub fn active_cluster(input: TokenStream) -> TokenStream {
+    if !input.is_empty() {
+        return err(syn::Error::new_spanned(
+            input,
+            "solex::active_cluster! takes no arguments",
+        ));
+    }
+    let ctx = match BuildContext::load(Span::call_site()) {
+        Ok(c) => c,
+        Err(e) => return err(e),
+    };
+    let lit = LitStr::new(ctx.cluster.as_deref().unwrap_or(""), Span::call_site());
+    quote!(#lit)
+}
+
 pub fn ships(input: TokenStream) -> TokenStream {
     let tag = match syn::parse2::<syn::Ident>(input.clone()) {
         Ok(ident) => ident.to_string(),

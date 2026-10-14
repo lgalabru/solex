@@ -13,6 +13,10 @@ pub const CHANNEL_ENV: &str = "SOLEX_CHANNEL";
 /// Environment variable pointing at the manifest to read (standalone or host).
 pub const MANIFEST_ENV: &str = "SOLEX_MANIFEST";
 
+/// Environment variable selecting the cluster within a multi-cluster channel,
+/// needed when the channel has per-cluster overrides.
+pub const CLUSTER_ENV: &str = "SOLEX_CLUSTER";
+
 /// Key under which host manifests (Anchor.toml, Quasar.toml, ...) embed the
 /// [`Channels`] section.
 pub const SECTION_KEY: &str = "solex";
@@ -389,6 +393,37 @@ includes = ["stable"]
             })
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    #[test]
+    fn per_cluster_override_syntax() {
+        let toml = r#"
+[channels.stable]
+program_id = "11111111111111111111111111111111"
+cluster = ["mainnet-beta", "devnet"]
+vars = { treasury = "main" }
+
+[channels.stable.devnet]
+vars = { treasury = "dev" }
+"#;
+        let (m, _) = parse(toml, Path::new("Solex.toml"), Format::Toml).unwrap();
+        let ch = m.channels.channel("stable").unwrap();
+        assert_eq!(
+            ch.resolved("stable", Some("devnet")).vars["treasury"],
+            "dev"
+        );
+        assert_eq!(
+            ch.resolved("stable", Some("mainnet-beta")).vars["treasury"],
+            "main"
+        );
+        let out = to_string(&m, Format::Toml).unwrap();
+        let (again, _) = parse(&out, Path::new("x"), Format::Toml).unwrap();
+        assert_eq!(again, m);
+
+        // A misspelled section lands in the override map and is rejected by name.
+        let bad = toml.replace("[channels.stable.devnet]", "[channels.stable.devnet-typo]");
+        let err = parse(&bad, Path::new("Solex.toml"), Format::Toml).unwrap_err();
+        assert!(err.to_string().contains("devnet-typo"), "{err}");
     }
 
     #[test]

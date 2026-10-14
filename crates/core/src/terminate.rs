@@ -55,7 +55,25 @@ impl TerminatePlan {
 pub fn plan(project: &Project, channel: &str, opts: &TerminateOptions) -> Result<TerminatePlan> {
     let channels = project.channels();
     let ch = channels.channel(channel)?;
-    let program_id = channels.program_id(channel)?.to_string();
+    let cluster = match opts.url.clone() {
+        Some(u) => Some(ch.cluster.select(Some(&u))?.remove(0)),
+        None => match ch.cluster.single() {
+            Some(c) => Some(c.to_string()),
+            None if ch.cluster.is_empty() => None,
+            None => {
+                return Err(CoreError::message(format!(
+                    "channel `{channel}` deploys to several clusters ({}); pass --cluster to \
+                     choose which one to terminate",
+                    ch.cluster.0.join(", ")
+                )));
+            }
+        },
+    };
+    let resolved = ch.resolved(channel, cluster.as_deref());
+    let program_id = resolved
+        .program_id
+        .ok_or_else(|| CoreError::message(format!("channel `{channel}` has no program_id")))?
+        .to_string();
     keys::validate_pubkey(&program_id).map_err(|reason| {
         CoreError::message(format!(
             "channel `{channel}` has an invalid program_id `{program_id}`: {reason}"
