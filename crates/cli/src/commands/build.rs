@@ -118,8 +118,18 @@ impl BuildCommand {
                 println!(
                     "{}",
                     components::ok(&format!(
-                        "{}  {}  {}  {}",
-                        style::pad_then(&label, 10, components::channel),
+                        "{}{}  {}  {}  {}",
+                        match &opts.cluster {
+                            Some(c) if ch.has_overrides() => {
+                                format!(
+                                    "{}{}",
+                                    components::channel(channel),
+                                    style::dim(&format!("/{c}"))
+                                )
+                            }
+                            _ => components::channel(channel),
+                        },
+                        " ".repeat(10usize.saturating_sub(label.chars().count())),
                         style::dim(&components::short(&out.program_id)),
                         style::dim(&style::human_size(out.size)),
                         style::dim(&style::human_duration(out.elapsed)),

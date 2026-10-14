@@ -112,6 +112,9 @@ fn main() {
     if let Err(e) = result {
         // First line is the headline; anything after it is detail.
         let text = e.to_string();
+        if text.is_empty() {
+            std::process::exit(e.exit_code());
+        }
         let mut lines = text.lines();
         let title = lines.next().unwrap_or("error");
         let body: Vec<&str> = lines.map(str::trim_start).collect();

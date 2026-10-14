@@ -79,22 +79,39 @@ impl InitCommand {
                 style::dim(&created.root.display().to_string())
             ))
         );
-        let rows: Vec<(&str, String)> = created
+        let width = created
             .program_ids
             .iter()
-            .map(|(ch, id)| (ch.as_str(), format!("{}  {}", components::channel(ch), id)))
-            .collect();
-        println!("{}", components::fields(&rows));
-        components::print_notice(
-            components::NoticeLevel::Info,
-            "Next",
-            &format!(
-                "cd {}\nsolex features            what ships where\nsolex build --{}   \
-                 cargo build-sbf for one channel\nkeys/*.json hold deploy authority for each \
-                 channel and are gitignored.",
-                self.name, self.channels[0]
+            .map(|(ch, _)| ch.chars().count())
+            .max()
+            .unwrap_or(0);
+        for (ch, id) in &created.program_ids {
+            println!(
+                "    {}{}  {id}",
+                components::channel(ch),
+                " ".repeat(width - ch.chars().count())
+            );
+        }
+        let first = &self.channels[0];
+        let steps = [
+            (format!("cd {}", self.name), String::new()),
+            ("solex features".to_string(), "what ships where".to_string()),
+            (
+                format!("solex build --{first}"),
+                "cargo build-sbf for one channel".to_string(),
             ),
-        );
+        ];
+        let w = steps
+            .iter()
+            .map(|(c, _)| c.chars().count())
+            .max()
+            .unwrap_or(0);
+        let mut body: Vec<String> = steps
+            .iter()
+            .map(|(c, d)| format!("{c:<w$}  {d}").trim_end().to_string())
+            .collect();
+        body.push("keys/*.json hold deploy authority for each channel and are gitignored.".into());
+        components::print_notice(components::NoticeLevel::Info, "Next", &body.join("\n"));
         Ok(())
     }
 }

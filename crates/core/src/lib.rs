@@ -52,6 +52,9 @@ pub enum CoreError {
     },
     #[error("{0}")]
     Message(String),
+    /// The command already reported the problem; only the exit code remains.
+    #[error("")]
+    Reported { code: i32 },
 }
 
 impl CoreError {
@@ -71,6 +74,7 @@ impl CoreError {
     pub fn exit_code(&self) -> i32 {
         match self {
             Self::CommandFailed { code, .. } if *code != 0 => *code,
+            Self::Reported { code } => *code,
             _ => 1,
         }
     }

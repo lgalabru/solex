@@ -139,7 +139,7 @@ impl FeaturesCommand {
                     &format!("{} problem(s) in channel gating", problems.len()),
                     &problems.join("\n"),
                 );
-                return Err(CoreError::message("solex features --check failed"));
+                return Err(CoreError::Reported { code: 1 });
             }
         }
         Ok(())
