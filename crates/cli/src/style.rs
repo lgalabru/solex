@@ -137,5 +137,6 @@ pub fn table(headers: &[&str], rows: &[Vec<String>], align: &[Align]) -> String 
         out.push('\n');
     }
     out.push_str(&rule);
+    out.push('\n');
     out
 }
