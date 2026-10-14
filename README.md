@@ -55,17 +55,22 @@ solex init counter --cluster stable=mainnet-beta --cluster nightly=devnet
 cd counter
 ```
 
-See what each channel ships:
+See what each channel ships, one row per gate:
 
 ```console
 $ solex features
 
-  item           #[channel]       stable   nightly
-  ─────────────  ───────────────  ──────── ────────
-  fn initialize  stable              ✓        ✓       src/lib.rs:12
-  fn increment   stable              ✓        ✓       src/lib.rs:19
-  fn reset       [nightly, 1000]     –      ✓@1000    src/lib.rs:27
+  counter  3 gated items in 1 file, 2 channels
+
+  gate                         items   stable   nightly
+  ───────────────────────────  ─────  ───────  ────────
+  #[channel(stable)]               2     ✓        ✓
+    initialize, increment
+  #[channel([nightly, 1000])]      1     –      ✓@1000
+    reset
 ```
+
+`--items` lists every marker with its file and line; `--json` is for tooling.
 
 Build and deploy a channel:
 
@@ -77,7 +82,7 @@ solex deploy --channel nightly
 | Command | Purpose |
 |---|---|
 | `solex init <name>` | scaffold a project; `--channels a,b,c`, `--cluster ch=cluster`, `--format toml` |
-| `solex features [--json] [--check]` | item × channel matrix; `--check` fails on tags no channel defines |
+| `solex features [--items] [--json] [--check]` | what ships where, one row per gate; `--items` lists every marker; `--check` fails on tags no channel defines |
 | `solex channels` | channels, program ids, clusters, resolved tag sets |
 | `solex build [--channel c \| --all]` | `cargo build-sbf` into `target/solex/<channel>/` |
 | `solex deploy [--channel c] [--build]` | `solana program deploy` with the channel's id, cluster and authority |

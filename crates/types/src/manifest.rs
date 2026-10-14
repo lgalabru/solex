@@ -147,6 +147,15 @@ impl Loaded {
     }
 }
 
+/// A host document (Anchor.toml, Quasar.toml, ...) seen only through its
+/// `solex` key. Deserializing straight from text, rather than through a
+/// generic value tree, keeps channels in declaration order.
+#[derive(Deserialize)]
+struct HostDoc {
+    #[serde(default)]
+    solex: Option<Manifest>,
+}
+
 /// Parse a document in `format`. Honors a top-level `solex` key when present
 /// (host manifest), otherwise reads the whole document as a [`Manifest`].
 pub fn parse(text: &str, path: &Path, format: Format) -> Result<(Manifest, Source)> {
@@ -157,31 +166,22 @@ pub fn parse(text: &str, path: &Path, format: Format) -> Result<(Manifest, Sourc
     let (manifest, source): (Manifest, Source) = match format {
         #[cfg(feature = "toml")]
         Format::Toml => {
-            let doc: toml::Table = toml::from_str(text).map_err(|e| parse_err(&e))?;
-            match doc.get(SECTION_KEY) {
-                Some(section) => (
-                    section
-                        .clone()
-                        .try_into::<Manifest>()
-                        .map_err(|e| parse_err(&e))?,
-                    Source::Embedded,
-                ),
+            let host: HostDoc = toml::from_str(text).map_err(|e| parse_err(&e))?;
+            match host.solex {
+                Some(m) => (m, Source::Embedded),
                 None => (
-                    doc.try_into::<Manifest>().map_err(|e| parse_err(&e))?,
+                    toml::from_str::<Manifest>(text).map_err(|e| parse_err(&e))?,
                     Source::Standalone,
                 ),
             }
         }
         #[cfg(feature = "yaml")]
         Format::Yaml => {
-            let doc: serde_yaml::Value = serde_yaml::from_str(text).map_err(|e| parse_err(&e))?;
-            match doc.get(SECTION_KEY) {
-                Some(section) => (
-                    serde_yaml::from_value(section.clone()).map_err(|e| parse_err(&e))?,
-                    Source::Embedded,
-                ),
+            let host: HostDoc = serde_yaml::from_str(text).map_err(|e| parse_err(&e))?;
+            match host.solex {
+                Some(m) => (m, Source::Embedded),
                 None => (
-                    serde_yaml::from_value(doc).map_err(|e| parse_err(&e))?,
+                    serde_yaml::from_str::<Manifest>(text).map_err(|e| parse_err(&e))?,
                     Source::Standalone,
                 ),
             }
@@ -201,7 +201,6 @@ pub fn parse(text: &str, path: &Path, format: Format) -> Result<(Manifest, Sourc
     Ok((manifest, source))
 }
 
-/// Serialize a standalone manifest in `format`.
 pub fn to_string(manifest: &Manifest, format: Format) -> Result<String> {
     let err = |e: &dyn std::fmt::Display| Error::Parse {
         path: PathBuf::from(match format {
@@ -393,6 +392,48 @@ includes = ["stable"]
             })
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    #[test]
+    fn channel_order_is_declaration_order_in_both_formats() {
+        let toml = r#"
+[channels.mainnet]
+program_id = "1"
+[channels.testnet]
+program_id = "1"
+[channels.devnet]
+program_id = "1"
+[channels.localnet]
+program_id = "1"
+"#;
+        let (m, _) = parse(toml, Path::new("Solex.toml"), Format::Toml).unwrap();
+        assert_eq!(
+            m.channels.names(),
+            ["mainnet", "testnet", "devnet", "localnet"]
+        );
+        let embedded = format!(
+            "[toolchain]\nx = 1\n{}",
+            toml.replace("[channels.", "[solex.channels.")
+        );
+        let (m, src) = parse(&embedded, Path::new("Anchor.toml"), Format::Toml).unwrap();
+        assert_eq!(src, Source::Embedded);
+        assert_eq!(
+            m.channels.names(),
+            ["mainnet", "testnet", "devnet", "localnet"]
+        );
+        let yaml = "channels:\n  mainnet: {program_id: '1'}\n  testnet: {program_id: '1'}\n  \
+                    devnet: {program_id: '1'}\n  localnet: {program_id: '1'}\n";
+        let (m, _) = parse(yaml, Path::new("Solex.yaml"), Format::Yaml).unwrap();
+        assert_eq!(
+            m.channels.names(),
+            ["mainnet", "testnet", "devnet", "localnet"]
+        );
+        let out = to_string(&m, Format::Toml).unwrap();
+        let (again, _) = parse(&out, Path::new("x"), Format::Toml).unwrap();
+        assert_eq!(
+            again.channels.names(),
+            ["mainnet", "testnet", "devnet", "localnet"]
+        );
     }
 
     #[test]

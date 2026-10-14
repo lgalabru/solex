@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "solex": {
+      "source": "lgalabru/solex",
+      "sourceType": "github",
+      "skillPath": "skills/solex/SKILL.md",
+      "computedHash": "9fd4b7af548baa07096306f466a0ca8d43a70bedaa4a6fc77f896ba81040999a"
+    }
+  }
+}

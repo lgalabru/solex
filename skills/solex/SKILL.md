@@ -74,7 +74,8 @@ as one diff each. The stable artifact stays small.
 # CLI
 
 - `solex channels [--json]`: deployments, ids, clusters, vars, resolved tags.
-- `solex features [--channel c] [--json] [--check]`: what ships where.
+- `solex features [--channel c] [--items] [--json] [--check]`: what ships
+  where, one row per gate; `--items` shows every marker with file:line.
 - `solex build --channel c [-- <cargo build-sbf args>]`: artifacts in
   `target/solex/<channel>/`. `--all` builds every channel.
 - `solex deploy --channel c [--build] [--dry-run]`: uses the channel's id,

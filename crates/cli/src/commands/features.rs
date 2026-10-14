@@ -22,6 +22,11 @@ pub struct FeaturesCommand {
     #[arg(long)]
     pub check: bool,
 
+    /// List every #[channel] marker with its file and line instead of one
+    /// row per gate
+    #[arg(long)]
+    pub items: bool,
+
     /// Path to the manifest
     #[arg(long)]
     pub manifest: Option<PathBuf>,
@@ -75,8 +80,10 @@ impl FeaturesCommand {
                 "{}",
                 serde_json::to_string_pretty(&rows).unwrap_or_default()
             );
-        } else {
+        } else if self.items {
             print_table(&matrix, &channels);
+        } else {
+            print_gates(&project.name(), &matrix, &channels);
         }
 
         if !unknown.is_empty() {
@@ -178,4 +185,162 @@ fn print_table(matrix: &scan::Matrix, channels: &[String]) {
         style::dim("– not compiled")
     );
     println!();
+}
+
+/// Default view: one row per distinct `#[channel(...)]` attribute, with the
+/// names behind it, so the table answers "what ships where" rather than
+/// listing dispatch plumbing.
+fn print_gates(name: &str, matrix: &scan::Matrix, channels: &[String]) {
+    if matrix.rows.is_empty() {
+        println!("  {}", style::dim("no #[channel] attributes found"));
+        return;
+    }
+    let mut gates: Vec<(&str, &Vec<Cell>, Vec<&scan::GatedItem>)> = Vec::new();
+    for (item, cells) in &matrix.rows {
+        match gates
+            .iter_mut()
+            .find(|(spec, _, _)| *spec == item.spec_text)
+        {
+            Some((_, _, items)) => items.push(item),
+            None => gates.push((item.spec_text.as_str(), cells, vec![item])),
+        }
+    }
+    let files: std::collections::BTreeSet<&std::path::Path> =
+        matrix.rows.iter().map(|(i, _)| i.file.as_path()).collect();
+
+    println!();
+    println!(
+        "  {}  {}",
+        style::bold(name),
+        style::dim(&format!(
+            "{} gated item{} in {} file{}, {} channel{}",
+            matrix.rows.len(),
+            if matrix.rows.len() == 1 { "" } else { "s" },
+            files.len(),
+            if files.len() == 1 { "" } else { "s" },
+            channels.len(),
+            if channels.len() == 1 { "" } else { "s" },
+        ))
+    );
+    println!();
+
+    let gate_w = gates
+        .iter()
+        .map(|(spec, _, _)| spec.len() + "#[channel()]".len())
+        .max()
+        .unwrap_or(10)
+        .max(10);
+    let col_w = channels.iter().map(|c| c.len()).max().unwrap_or(6).max(8);
+
+    print!(
+        "  {}  {}",
+        style::pad_then("gate", gate_w, style::bold),
+        style::bold("items")
+    );
+    for ch in channels {
+        let left = col_w.saturating_sub(ch.len()) / 2;
+        let right = col_w.saturating_sub(ch.len() + left);
+        print!(
+            "  {}{}{}",
+            " ".repeat(left),
+            style::accent(ch),
+            " ".repeat(right)
+        );
+    }
+    println!();
+    print!("  {}  {}", "─".repeat(gate_w), "─".repeat(5));
+    for _ in channels {
+        print!("  {}", "─".repeat(col_w));
+    }
+    println!();
+
+    for (spec, cells, items) in &gates {
+        let label = format!("#[channel({spec})]");
+        print!("  {label:<gate_w$}  {:>5}", items.len());
+        for cell in cells.iter() {
+            let (text, visible) = match cell {
+                Cell::Excluded => (style::dim("–"), 1),
+                Cell::Included => (style::green("✓"), 1),
+                Cell::IncludedFrom(e) => {
+                    (style::yellow(&format!("✓@{e}")), 2 + e.to_string().len())
+                }
+            };
+            let left = col_w.saturating_sub(visible) / 2;
+            let right = col_w.saturating_sub(visible + left);
+            print!("  {}{text}{}", " ".repeat(left), " ".repeat(right));
+        }
+        println!();
+        for line in summarize(items) {
+            println!("    {}", style::dim(&line));
+        }
+    }
+    println!();
+    println!(
+        "  {}  {}  {}   {}",
+        style::green("✓ ships"),
+        style::yellow("✓@N ships, active from epoch N"),
+        style::dim("– not compiled"),
+        style::dim("--items lists every marker")
+    );
+    println!();
+}
+
+/// Names worth reading (variants, functions, types, modules) first, then a
+/// count of the plumbing markers (match arms, discriminator consts, fields).
+fn summarize(items: &[&scan::GatedItem]) -> Vec<String> {
+    use std::collections::BTreeMap;
+    // Instruction-level names (variants, types, modules) read first; helper
+    // functions after them. Stable sort keeps source order within a rank.
+    fn rank(kind: &str) -> u8 {
+        match kind {
+            "variant" | "struct" | "enum" | "mod" => 0,
+            _ => 1,
+        }
+    }
+    let mut named: Vec<(String, &str, usize)> = Vec::new();
+    let mut plumbing: BTreeMap<&str, usize> = BTreeMap::new();
+    for item in items {
+        match item.kind {
+            "arm" | "field" | "const" => *plumbing.entry(item.kind).or_default() += 1,
+            _ => match named.iter_mut().find(|(n, _, _)| *n == item.name) {
+                Some((_, _, c)) => *c += 1,
+                None => named.push((item.name.clone(), item.kind, 1)),
+            },
+        }
+    }
+    named.sort_by_key(|(_, kind, _)| rank(kind));
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    for (name, _, count) in &named {
+        let piece = if *count > 1 {
+            format!("{name} ×{count}")
+        } else {
+            name.clone()
+        };
+        if !current.is_empty() && current.len() + piece.len() + 2 > 88 {
+            lines.push(std::mem::take(&mut current));
+        }
+        if !current.is_empty() {
+            current.push_str(", ");
+        }
+        current.push_str(&piece);
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    if !plumbing.is_empty() {
+        let parts: Vec<String> = plumbing
+            .iter()
+            .map(|(kind, n)| {
+                let label = match *kind {
+                    "arm" => "match arm",
+                    "const" => "const",
+                    _ => "field",
+                };
+                format!("{n} {label}{}", if *n == 1 { "" } else { "s" })
+            })
+            .collect();
+        lines.push(format!("+ {}", parts.join(", ")));
+    }
+    lines
 }
