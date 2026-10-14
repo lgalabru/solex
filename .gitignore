@@ -1,0 +1,6 @@
+/target
+**/target
+Cargo.lock.bak
+.DS_Store
+# Program keypairs hold deploy authority for a channel; never commit them.
+examples/*/keys/*.json

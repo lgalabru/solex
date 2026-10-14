@@ -1,0 +1,16 @@
+# Solex release channels. Each channel is a separate deployment with its own
+# program id; `includes` lists channels whose #[channel] tags also ship here.
+# Docs: https://github.com/lgalabru/solex
+name: counter
+default_channel: stable
+channels:
+  nightly:
+    program_id: 9rwsA9m17bLqtT1GZcjGZiWfzm4yXsu1p6w7AiAPKGMs
+    keypair: keys/nightly.json
+    cluster: devnet
+    includes:
+    - stable
+  stable:
+    program_id: 2mwKUED1kXW5nGmpTrLGbdMBe9miMkstQjUJm9vEUsqH
+    keypair: keys/stable.json
+    cluster: mainnet-beta

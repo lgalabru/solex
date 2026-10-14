@@ -1,0 +1,3 @@
+/target
+# Channel keypairs carry deploy authority; keep them out of git.
+/keys/*.json

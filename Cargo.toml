@@ -1,0 +1,47 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+default-members = ["crates/cli"]
+# Excluded packages have their own feature resolution: the example is built
+# with `solex build` (cargo build-sbf), and tests/native must see solex with
+# `native` only (workspace members would unify it with `anchor`).
+exclude = ["examples/*", "tests/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/lgalabru/solex"
+authors = ["Ludovic Galabru <ludo.galabru@solana.org>"]
+rust-version = "1.85"
+
+[workspace.dependencies]
+solex-manifest = { version = "0.1.0", path = "crates/manifest" }
+solex-macros = { version = "0.1.0", path = "crates/macros" }
+solex-core = { version = "0.1.0", path = "crates/core" }
+solex = { version = "0.1.0", path = "crates/solex" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+indexmap = { version = "2", features = ["serde"] }
+thiserror = "2"
+bs58 = "0.5"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full", "extra-traits", "visit"] }
+walkdir = "2"
+clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
+console = "0.16"
+indicatif = "0.18"
+dirs = "6"
+tempfile = "3"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
+
+[workspace.lints.clippy]
+all = "warn"

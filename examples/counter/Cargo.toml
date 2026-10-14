@@ -1,0 +1,34 @@
+[package]
+name = "counter"
+version = "0.1.0"
+edition = "2021"
+
+# Standalone package even when nested inside another cargo workspace.
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "counter"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+idl-build = ["anchor-lang/idl-build"]
+
+[dependencies]
+anchor-lang = "1"
+solex = { path = "../../crates/solex" }
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+
+# Anchor's entrypoint checks cfgs that only exist on the SBF target.
+[lints.rust.unexpected_cfgs]
+level = "warn"
+check-cfg = [
+    'cfg(target_os, values("solana"))',
+    'cfg(feature, values("custom-heap", "custom-panic", "anchor-debug", "no-log-ix-name"))',
+]

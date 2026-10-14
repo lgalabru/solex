@@ -1,0 +1,14 @@
+# Kept out of the workspace on purpose: cargo unifies features across members,
+# and the Anchor integration crate would otherwise turn on solex's `anchor`
+# feature here too. Run with `just test-native`.
+[package]
+name = "solex-native-tests"
+description = "Integration tests for solex macros on a framework-free program"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+solex = { path = "../../crates/solex", default-features = false, features = ["native"] }

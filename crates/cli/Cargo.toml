@@ -1,0 +1,28 @@
+[package]
+name = "solex-cli"
+description = "solex — ship Solana program features per release channel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "solex"
+path = "src/main.rs"
+
+[dependencies]
+solex-core = { workspace = true }
+solex-manifest = { workspace = true }
+clap = { workspace = true }
+clap_complete = { workspace = true }
+console = { workspace = true }
+indicatif = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

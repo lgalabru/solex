@@ -1,0 +1,24 @@
+[package]
+name = "solex-manifest"
+description = "Solex.yaml manifest model and channel resolution for the Solex framework"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+indexmap = { workspace = true }
+thiserror = { workspace = true }
+syn = { workspace = true }
+proc-macro2 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+quote = { workspace = true }

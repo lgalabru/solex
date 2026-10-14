@@ -1,0 +1,35 @@
+[package]
+name = "solex"
+description = "SOlana EXpress: ship Solana program features per release channel with #[channel(...)]"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["anchor"]
+# Build on Anchor: `#[solex::program]` wraps `#[anchor_lang::program]` and
+# `declare_id!` wraps Anchor's.
+anchor = ["dep:anchor-lang"]
+# Framework-free programs on the modular solana-* crates.
+native = [
+    "dep:solana-pubkey",
+    "dep:solana-clock",
+    "dep:solana-sysvar",
+    "dep:solana-program-error",
+    "dep:solana-msg",
+]
+
+[dependencies]
+solex-macros = { workspace = true }
+anchor-lang = { version = "1", optional = true }
+solana-pubkey = { version = "3", optional = true }
+solana-clock = { version = "3", optional = true }
+solana-sysvar = { version = "3", optional = true }
+solana-program-error = { version = "3", optional = true }
+solana-msg = { version = "3", optional = true }
