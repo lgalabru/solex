@@ -11,4 +11,4 @@ publish = false
 [workspace]
 
 [dependencies]
-solex = { path = "../../crates/solex", default-features = false, features = ["native"] }
+solex-lang = { path = "../../crates/lang", default-features = false, features = ["native"] }

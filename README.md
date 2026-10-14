@@ -40,16 +40,11 @@ A nightly instruction has no discriminator, no IDL entry and no bytes in the sta
 
 ## Installation
 
-From source:
-
 ```console
-git clone https://github.com/lgalabru/solex.git
-cd solex
-cargo install --path crates/cli
-solex --version
+cargo install solex
 ```
 
-Requires the Solana CLI with `cargo build-sbf` for program builds.
+Requires the Solana CLI with `cargo build-sbf` for program builds. To build from source, clone the repo and run `cargo install --path crates/cli`.
 
 ## Usage
 
@@ -143,9 +138,9 @@ The attribute works on functions, structs, impls and modules. Epoch gates apply 
 |---|---|
 | `crates/manifest` | `Solex.yaml` model, channel resolution, `#[channel]` grammar |
 | `crates/macros` | proc macros |
-| `crates/solex` | the crate programs depend on |
+| `crates/lang` | `solex-lang`, the crate programs depend on (`use solex::...`) |
 | `crates/core` | build, deploy, scan and scaffold logic |
-| `crates/cli` | the `solex` binary |
+| `crates/cli` | the `solex` binary (`cargo install solex`) |
 | `tests/native` | macro tests on a framework-free program, run once per channel |
 | `examples/counter` | the program `solex init` produces |
 

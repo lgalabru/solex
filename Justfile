@@ -33,7 +33,7 @@ test-native:
 
 # Build the CLI
 build:
-    cargo build --release -p solex-cli
+    cargo build --release -p solex
 
 # Install the CLI locally
 install:
@@ -46,7 +46,7 @@ example-check:
 
 # Build the example program for every channel (requires cargo build-sbf)
 example-build:
-    cargo build -p solex-cli
+    cargo build -p solex
     cd examples/counter && ../../target/debug/solex build --all
 
 # Full CI gate

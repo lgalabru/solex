@@ -1766,19 +1766,6 @@ dependencies = [
 name = "solex"
 version = "0.1.0"
 dependencies = [
- "anchor-lang",
- "solana-clock 3.2.1",
- "solana-msg",
- "solana-program-error",
- "solana-pubkey 3.0.0",
- "solana-sysvar",
- "solex-macros",
-]
-
-[[package]]
-name = "solex-cli"
-version = "0.1.0"
-dependencies = [
  "clap",
  "clap_complete",
  "console",
@@ -1805,6 +1792,19 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "walkdir",
+]
+
+[[package]]
+name = "solex-lang"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "solana-clock 3.2.1",
+ "solana-msg",
+ "solana-program-error",
+ "solana-pubkey 3.0.0",
+ "solana-sysvar",
+ "solex-macros",
 ]
 
 [[package]]

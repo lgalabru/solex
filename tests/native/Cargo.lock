@@ -783,7 +783,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "solex"
+name = "solex-lang"
 version = "0.1.0"
 dependencies = [
  "solana-clock 3.2.1",
@@ -821,7 +821,7 @@ dependencies = [
 name = "solex-native-tests"
 version = "0.1.0"
 dependencies = [
- "solex",
+ "solex-lang",
 ]
 
 [[package]]

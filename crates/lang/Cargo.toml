@@ -1,5 +1,5 @@
 [package]
-name = "solex"
+name = "solex-lang"
 description = "Ship Solana program features per release channel with #[channel(...)]"
 version.workspace = true
 edition.workspace = true
@@ -7,6 +7,11 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
+
+# Programs write `use solex::...`; the package is `solex-lang` because the
+# `solex` name on crates.io belongs to the CLI (`cargo install solex`).
+[lib]
+name = "solex"
 
 [lints]
 workspace = true

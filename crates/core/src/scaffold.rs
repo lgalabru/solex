@@ -179,7 +179,7 @@ idl-build = ["anchor-lang/idl-build"]
 
 [dependencies]
 anchor-lang = "1"
-solex = "{solex_version}"
+solex-lang = "{solex_version}"
 
 [profile.release]
 overflow-checks = true

@@ -19,7 +19,7 @@ rust-version = "1.85"
 solex-manifest = { version = "0.1.0", path = "crates/manifest" }
 solex-macros = { version = "0.1.0", path = "crates/macros" }
 solex-core = { version = "0.1.0", path = "crates/core" }
-solex = { version = "0.1.0", path = "crates/solex" }
+solex-lang = { version = "0.1.0", path = "crates/lang" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
