@@ -57,3 +57,22 @@ fn epoch_gate_runs_before_body() {
 fn require_epoch_surfaces_sysvar_error_off_chain() {
     assert!(solex::current_epoch().is_err());
 }
+
+#[test]
+fn var_follows_channel() {
+    assert_eq!(p::TREASURY, format!("{}-treasury", p::CHANNEL));
+}
+
+#[test]
+fn gated_enum_and_dispatch_follow_channel() {
+    assert_eq!(p::Instruction::from_byte(1), Some(p::Instruction::Open));
+    assert_eq!(p::Instruction::Open.name(), "open");
+    let hooks = p::Instruction::from_byte(10);
+    if p::HAS_NIGHTLY {
+        assert_eq!(hooks.map(|i| i.name()), Some("open_with_hooks"));
+        assert_eq!(p::dispatch_count(), 2);
+    } else {
+        assert_eq!(hooks, None);
+        assert_eq!(p::dispatch_count(), 1);
+    }
+}

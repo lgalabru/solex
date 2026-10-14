@@ -6,6 +6,8 @@ pub mod deploy;
 pub mod features;
 pub mod init;
 pub mod keys;
+pub mod mcp;
+pub mod setup;
 pub mod test;
 
 use solex_core::{CoreError, Project, Result};

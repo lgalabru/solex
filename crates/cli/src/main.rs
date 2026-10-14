@@ -40,6 +40,10 @@ enum Command {
     Test(commands::test::TestCommand),
     /// Print the resolved channel name (for scripts)
     Channel(commands::channel::ChannelCommand),
+    /// Install the agent skill and optionally register the MCP server
+    Setup(commands::setup::SetupCommand),
+    /// Run the MCP server over stdio (channels, feature matrix, builds, deploy plans)
+    Mcp(commands::mcp::McpCommand),
     /// Generate shell completions
     Completions(commands::completions::CompletionsCommand),
 }
@@ -56,6 +60,8 @@ fn main() {
         Command::Keys(cmd) => cmd.execute(),
         Command::Test(cmd) => cmd.execute(),
         Command::Channel(cmd) => cmd.execute(),
+        Command::Setup(cmd) => cmd.execute(),
+        Command::Mcp(cmd) => cmd.execute(),
         Command::Completions(cmd) => {
             cmd.execute(&mut Cli::command());
             Ok(())

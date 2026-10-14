@@ -1,0 +1,16 @@
+# Compile check for the `pinocchio` feature: a no_std program crate. Kept out of
+# the workspace so solex-lang's `anchor` default does not unify in.
+[package]
+name = "solex-pinocchio-check"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+solex-lang = { path = "../../crates/lang", default-features = false, features = ["pinocchio"] }
+pinocchio = "0.11"

@@ -3,7 +3,8 @@
 use proc_macro2::{Span, TokenStream};
 use quote::{ToTokens, quote, quote_spanned};
 use syn::{
-    Attribute, ImplItem, Item, ItemMod, LitStr, Meta, parse_quote_spanned, spanned::Spanned,
+    Attribute, ImplItem, Item, ItemMod, LitStr, Meta, parse_quote, parse_quote_spanned,
+    spanned::Spanned, visit_mut::VisitMut,
 };
 
 use solex_types::spec::{Decision, FeatureSpec, decide};
@@ -26,14 +27,20 @@ pub fn channel(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Attribute macros may sit on free items or on associated items; try both.
     if let Ok(mut it) = syn::parse2::<Item>(item.clone()) {
         return match apply_to_item(&ctx, &spec, &mut it) {
-            Ok(true) => it.into_token_stream(),
+            Ok(true) => match gate_nested_item(&ctx, &mut it) {
+                Ok(()) => it.into_token_stream(),
+                Err(e) => err(e),
+            },
             Ok(false) => TokenStream::new(),
             Err(e) => err(e),
         };
     }
     match syn::parse2::<ImplItem>(item) {
         Ok(mut it) => match apply_to_impl_item(&ctx, &spec, &mut it) {
-            Ok(true) => it.into_token_stream(),
+            Ok(true) => match gate_nested_impl_item(&ctx, &mut it) {
+                Ok(()) => it.into_token_stream(),
+                Err(e) => err(e),
+            },
             Ok(false) => TokenStream::new(),
             Err(e) => err(e),
         },
@@ -152,32 +159,17 @@ pub fn program(attr: TokenStream, item: TokenStream) -> TokenStream {
         Ok(c) => c,
         Err(e) => return err(e),
     };
-    let Some((_, items)) = module.content.as_mut() else {
+    if module.content.is_none() {
         return err(syn::Error::new(
             module.span(),
             "#[solex::program] requires an inline module body (`mod name { ... }`)",
         ));
-    };
-
-    let mut kept = Vec::with_capacity(items.len());
-    for mut it in items.drain(..) {
-        let spec = match item_attrs(&mut it).map(take_channel_spec) {
-            Some(Ok(spec)) => spec,
-            Some(Err(e)) => return err(e),
-            None => None,
-        };
-        let keep = match spec {
-            None => true,
-            Some(spec) => match apply_to_item(&ctx, &spec, &mut it) {
-                Ok(k) => k,
-                Err(e) => return err(e),
-            },
-        };
-        if keep {
-            kept.push(it);
-        }
     }
-    *items = kept;
+    let mut gate = Gate::new(&ctx);
+    gate.visit_item_mod_mut(&mut module);
+    if let Some(e) = gate.error {
+        return err(e);
+    }
 
     let framework_attr = framework_program_attr(attr);
     quote! {
@@ -277,4 +269,230 @@ pub fn ships(input: TokenStream) -> TokenStream {
     };
     let value = ctx.tags.contains(&tag);
     quote!(#value)
+}
+
+pub fn gated(attr: TokenStream, item: TokenStream) -> TokenStream {
+    if !attr.is_empty() {
+        return err(syn::Error::new_spanned(
+            attr,
+            "#[solex::gated] takes no arguments; put #[channel(...)] on the variants, fields, \
+             arms or statements inside",
+        ));
+    }
+    let ctx = match BuildContext::load(Span::call_site()) {
+        Ok(c) => c,
+        Err(e) => return err(e),
+    };
+    if let Ok(mut it) = syn::parse2::<Item>(item.clone()) {
+        return match gate_nested_item(&ctx, &mut it) {
+            Ok(()) => it.into_token_stream(),
+            Err(e) => err(e),
+        };
+    }
+    match syn::parse2::<ImplItem>(item) {
+        Ok(mut it) => match gate_nested_impl_item(&ctx, &mut it) {
+            Ok(()) => it.into_token_stream(),
+            Err(e) => err(e),
+        },
+        Err(e) => err(syn::Error::new(
+            e.span(),
+            "#[solex::gated] can only be applied to items",
+        )),
+    }
+}
+
+pub fn var(input: TokenStream) -> TokenStream {
+    let name: LitStr = match syn::parse2(input) {
+        Ok(l) => l,
+        Err(e) => {
+            return err(syn::Error::new(
+                e.span(),
+                "solex::var! expects a string literal, e.g. var!(\"treasury_owner\")",
+            ));
+        }
+    };
+    let ctx = match BuildContext::load(name.span()) {
+        Ok(c) => c,
+        Err(e) => return err(e),
+    };
+    match ctx.var(&name.value(), name.span()) {
+        Ok(v) => {
+            let lit = LitStr::new(&v, name.span());
+            quote!(#lit)
+        }
+        Err(e) => err(e),
+    }
+}
+
+fn gate_nested_item(ctx: &BuildContext, item: &mut Item) -> syn::Result<()> {
+    let mut gate = Gate::new(ctx);
+    gate.visit_item_mut(item);
+    gate.error.map_or(Ok(()), Err)
+}
+
+fn gate_nested_impl_item(ctx: &BuildContext, item: &mut ImplItem) -> syn::Result<()> {
+    let mut gate = Gate::new(ctx);
+    gate.visit_impl_item_mut(item);
+    gate.error.map_or(Ok(()), Err)
+}
+
+/// Walks an item and resolves every nested `#[channel(...)]` marker.
+///
+/// Items (in modules, impl blocks and fn bodies) are removed or kept with the
+/// usual epoch handling. Positions where attribute macros cannot run (enum
+/// variants, struct fields, match arms, `let` statements, macro statements)
+/// get `#[cfg(any())]` when excluded and lose the marker when included.
+struct Gate<'a> {
+    ctx: &'a BuildContext,
+    error: Option<syn::Error>,
+}
+
+impl<'a> Gate<'a> {
+    fn new(ctx: &'a BuildContext) -> Self {
+        Self { ctx, error: None }
+    }
+
+    fn fail(&mut self, e: syn::Error) {
+        if self.error.is_none() {
+            self.error = Some(e);
+        }
+    }
+
+    /// Rewrite a marker on a non-item position into a `cfg`.
+    fn cfg_attrs(&mut self, attrs: &mut Vec<Attribute>) {
+        let spec = match take_channel_spec(attrs) {
+            Ok(Some(spec)) => spec,
+            Ok(None) => return,
+            Err(e) => return self.fail(e),
+        };
+        match decide(&spec, &self.ctx.tags) {
+            Decision::Exclude => attrs.push(parse_quote!(#[cfg(any())])),
+            Decision::Include { epoch: None } => {}
+            Decision::Include { epoch: Some(_) } => self.fail(syn::Error::new(
+                spec.entries[0].span,
+                "an epoch bound (`[tag, epoch]`) is only supported on functions; variants, \
+                 fields, arms and statements take a plain tag",
+            )),
+        }
+    }
+
+    /// Returns whether the item stays; applies epoch gates in place.
+    fn keep_item(&mut self, item: &mut Item) -> bool {
+        let spec = match item_attrs(item).map(take_channel_spec) {
+            Some(Ok(Some(spec))) => spec,
+            Some(Ok(None)) | None => return true,
+            Some(Err(e)) => {
+                self.fail(e);
+                return true;
+            }
+        };
+        match apply_to_item(self.ctx, &spec, item) {
+            Ok(keep) => keep,
+            Err(e) => {
+                self.fail(e);
+                true
+            }
+        }
+    }
+
+    fn keep_impl_item(&mut self, item: &mut ImplItem) -> bool {
+        let attrs = match item {
+            ImplItem::Const(i) => &mut i.attrs,
+            ImplItem::Fn(i) => &mut i.attrs,
+            ImplItem::Type(i) => &mut i.attrs,
+            ImplItem::Macro(i) => &mut i.attrs,
+            _ => return true,
+        };
+        let spec = match take_channel_spec(attrs) {
+            Ok(Some(spec)) => spec,
+            Ok(None) => return true,
+            Err(e) => {
+                self.fail(e);
+                return true;
+            }
+        };
+        match apply_to_impl_item(self.ctx, &spec, item) {
+            Ok(keep) => keep,
+            Err(e) => {
+                self.fail(e);
+                true
+            }
+        }
+    }
+}
+
+impl VisitMut for Gate<'_> {
+    fn visit_item_mod_mut(&mut self, m: &mut ItemMod) {
+        if let Some((_, items)) = m.content.as_mut() {
+            items.retain_mut(|it| self.keep_item(it));
+        }
+        syn::visit_mut::visit_item_mod_mut(self, m);
+    }
+
+    fn visit_item_impl_mut(&mut self, i: &mut syn::ItemImpl) {
+        i.items.retain_mut(|it| self.keep_impl_item(it));
+        syn::visit_mut::visit_item_impl_mut(self, i);
+    }
+
+    fn visit_item_enum_mut(&mut self, e: &mut syn::ItemEnum) {
+        for v in e.variants.iter_mut() {
+            self.cfg_attrs(&mut v.attrs);
+        }
+        syn::visit_mut::visit_item_enum_mut(self, e);
+    }
+
+    fn visit_field_mut(&mut self, f: &mut syn::Field) {
+        self.cfg_attrs(&mut f.attrs);
+        syn::visit_mut::visit_field_mut(self, f);
+    }
+
+    fn visit_expr_match_mut(&mut self, m: &mut syn::ExprMatch) {
+        for arm in m.arms.iter_mut() {
+            self.cfg_attrs(&mut arm.attrs);
+        }
+        syn::visit_mut::visit_expr_match_mut(self, m);
+    }
+
+    fn visit_block_mut(&mut self, b: &mut syn::Block) {
+        b.stmts.retain_mut(|stmt| match stmt {
+            syn::Stmt::Item(item) => self.keep_item(item),
+            syn::Stmt::Local(local) => {
+                self.cfg_attrs(&mut local.attrs);
+                true
+            }
+            syn::Stmt::Macro(mac) => {
+                self.cfg_attrs(&mut mac.attrs);
+                true
+            }
+            syn::Stmt::Expr(expr, _) => {
+                if let Some(attrs) = expr_attrs(expr) {
+                    self.cfg_attrs(attrs);
+                }
+                true
+            }
+        });
+        syn::visit_mut::visit_block_mut(self, b);
+    }
+}
+
+/// Outer attributes of an expression statement, for the expression kinds that
+/// make sense to gate. Other kinds keep their marker and rustc reports it.
+fn expr_attrs(expr: &mut syn::Expr) -> Option<&mut Vec<Attribute>> {
+    use syn::Expr::*;
+    Some(match expr {
+        Assign(e) => &mut e.attrs,
+        Block(e) => &mut e.attrs,
+        Call(e) => &mut e.attrs,
+        ForLoop(e) => &mut e.attrs,
+        If(e) => &mut e.attrs,
+        Loop(e) => &mut e.attrs,
+        Macro(e) => &mut e.attrs,
+        Match(e) => &mut e.attrs,
+        MethodCall(e) => &mut e.attrs,
+        Return(e) => &mut e.attrs,
+        Try(e) => &mut e.attrs,
+        Unsafe(e) => &mut e.attrs,
+        While(e) => &mut e.attrs,
+        _ => return None,
+    })
 }

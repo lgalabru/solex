@@ -1,0 +1,10 @@
+default_channel = "mainnet"
+
+[channels.mainnet]
+program_id = "CHNLxYvVA28MJP9PrFuDXccuoGXAx7jBacfLEkahyGsX"
+vars = { treasury_owner = "Cs2zdfUNonRdRGsiZUQQLdTxzxVvJZmgiX2mpLYKuEqP" }
+
+[channels.devnet]
+includes = ["mainnet"]
+program_id = "CHNLxBtXw7VPqd5GMcbtVoEbn4ehyaSoiHj56Ao5sWkJ"
+vars = { treasury_owner = "4zTeC5mVqWLruDexgU2mV66p9t5vCA9JyiZqdGDUspap" }

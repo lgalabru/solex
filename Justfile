@@ -7,11 +7,13 @@ default:
 fmt:
     cargo fmt --all -- --check
     cargo fmt --manifest-path tests/native/Cargo.toml -- --check
+    cargo fmt --manifest-path tests/pinocchio/Cargo.toml -- --check
     cargo fmt --manifest-path examples/counter/Cargo.toml -- --check
 
 fmt-fix:
     cargo fmt --all
     cargo fmt --manifest-path tests/native/Cargo.toml
+    cargo fmt --manifest-path tests/pinocchio/Cargo.toml
     cargo fmt --manifest-path examples/counter/Cargo.toml
 
 # Clippy with warnings as errors
@@ -20,7 +22,7 @@ lint:
     cargo clippy --manifest-path tests/native/Cargo.toml --all-targets -- -D warnings
 
 # Host tests: workspace crates (Anchor integration included) + native tests per channel
-test: test-workspace test-native
+test: test-workspace test-native test-pinocchio
 
 test-workspace:
     cargo test --workspace
@@ -30,6 +32,11 @@ test-native:
     cargo test --manifest-path tests/native/Cargo.toml
     SOLEX_CHANNEL=nightly cargo test --manifest-path tests/native/Cargo.toml
     SOLEX_CHANNEL=canary cargo test --manifest-path tests/native/Cargo.toml
+
+# no_std Pinocchio compile check for the `pinocchio` feature, per channel
+test-pinocchio:
+    SOLEX_CHANNEL=mainnet cargo check --manifest-path tests/pinocchio/Cargo.toml
+    SOLEX_CHANNEL=devnet cargo check --manifest-path tests/pinocchio/Cargo.toml
 
 # Build the CLI
 build:

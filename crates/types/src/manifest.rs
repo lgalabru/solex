@@ -32,6 +32,10 @@ pub struct Manifest {
     /// Path to the program crate, relative to the manifest. Defaults to `.`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub program_path: Option<PathBuf>,
+    /// Extra arguments for `cargo build-sbf` on every channel, such as
+    /// `["--tools-version", "v1.58", "--arch", "v3"]`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub build_args: Vec<String>,
     #[serde(flatten)]
     pub channels: Channels,
 }
@@ -245,10 +249,13 @@ mod tests {
     const YAML: &str = r#"
 name: counter
 default_channel: stable
+build_args: ["--arch", "v3"]
 channels:
   stable:
     program_id: "11111111111111111111111111111111"
     cluster: mainnet-beta
+    vars:
+      treasury: "4zTeC5mVqWLruDexgU2mV66p9t5vCA9JyiZqdGDUspap"
   nightly:
     includes: [stable]
     program_id: "22222222222222222222222222222222"
@@ -258,10 +265,12 @@ channels:
     const TOML: &str = r#"
 name = "counter"
 default_channel = "stable"
+build_args = ["--arch", "v3"]
 
 [channels.stable]
 program_id = "11111111111111111111111111111111"
 cluster = "mainnet-beta"
+vars = { treasury = "4zTeC5mVqWLruDexgU2mV66p9t5vCA9JyiZqdGDUspap" }
 
 [channels.nightly]
 includes = ["stable"]
@@ -295,6 +304,12 @@ includes = ["stable"]
         assert_eq!((sy, st), (Source::Standalone, Source::Standalone));
         assert_eq!(y.channels.names(), ["stable", "nightly"]);
         assert_eq!(y.name.as_deref(), Some("counter"));
+        assert_eq!(y.build_args, ["--arch", "v3"]);
+        assert_eq!(
+            y.channels.channel("stable").unwrap().vars["treasury"],
+            "4zTeC5mVqWLruDexgU2mV66p9t5vCA9JyiZqdGDUspap"
+        );
+        assert!(y.channels.channel("nightly").unwrap().vars.is_empty());
     }
 
     #[test]

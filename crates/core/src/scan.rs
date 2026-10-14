@@ -7,6 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use quote::ToTokens;
 use solex_types::{
     Channels,
     spec::{Decision, FeatureSpec, decide},
@@ -162,6 +163,25 @@ impl<'ast> Visit<'ast> for Collector {
         self.record(&i.attrs, "impl", name, i.impl_token.span());
         syn::visit::visit_item_impl(self, i);
     }
+    // Positions handled by `#[solex::gated]` rather than by the attribute macro.
+    fn visit_variant(&mut self, v: &'ast syn::Variant) {
+        self.record(&v.attrs, "variant", v.ident.to_string(), v.ident.span());
+        syn::visit::visit_variant(self, v);
+    }
+    fn visit_arm(&mut self, a: &'ast syn::Arm) {
+        let pat = a.pat.to_token_stream().to_string().replace(" :: ", "::");
+        self.record(&a.attrs, "arm", pat, a.pat.span());
+        syn::visit::visit_arm(self, a);
+    }
+    fn visit_field(&mut self, f: &'ast syn::Field) {
+        let name = f
+            .ident
+            .as_ref()
+            .map(|i| i.to_string())
+            .unwrap_or_else(|| "_".into());
+        self.record(&f.attrs, "field", name, f.span());
+        syn::visit::visit_field(self, f);
+    }
 }
 
 fn type_name(ty: &syn::Type) -> String {
@@ -258,6 +278,23 @@ mod tests {
             pub fn b() {}
             pub fn plain() {}
         }
+
+        #[solex::gated]
+        enum Ix {
+            Open = 1,
+            #[channel(nightly)]
+            OpenWithHooks = 10,
+        }
+
+        #[solex::gated]
+        fn dispatch(b: u8) -> u8 {
+            match b {
+                1 => 1,
+                #[channel(nightly)]
+                10 => 10,
+                _ => 0,
+            }
+        }
     "#;
 
     fn manifest() -> Channels {
@@ -287,7 +324,9 @@ channels:
                 ("struct", "Thing"),
                 ("method", "m"),
                 ("fn", "a"),
-                ("fn", "b")
+                ("fn", "b"),
+                ("variant", "OpenWithHooks"),
+                ("arm", "10"),
             ]
         );
         assert_eq!(items[0].file, Path::new("lib.rs"));

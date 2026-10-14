@@ -22,6 +22,9 @@ pub struct BuildOptions {
     pub debug: bool,
     /// Pin platform-tools (`--tools-version vX.Y`).
     pub tools_version: Option<String>,
+    /// Arguments appended to `cargo build-sbf` after the manifest's
+    /// `build_args` (for example `--arch v3`).
+    pub extra_args: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -65,6 +68,8 @@ pub fn build_command(project: &Project, channel: &str, opts: &BuildOptions) -> C
     if !opts.features.is_empty() {
         cmd.args(["--features", &opts.features.join(",")]);
     }
+    cmd.args(&project.manifest().build_args);
+    cmd.args(&opts.extra_args);
     cmd.envs(channel_env(project, channel))
         .current_dir(project.root());
     cmd

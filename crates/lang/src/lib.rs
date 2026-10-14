@@ -1,7 +1,7 @@
 //! # solex — SOlana EXpress
 //!
-//! Ship one codebase to several release channels. Each channel in
-//! `Solex.yaml` has its own program id and a set of feature tags; items marked
+//! Ship one codebase to several release channels. Each channel in the
+//! manifest has its own program id and a set of tags; items marked
 //! `#[channel(tag)]` compile only into channels that ship that tag, and
 //! `#[channel([tag, epoch])]` additionally refuses to run before the cluster
 //! reaches `epoch`.
@@ -22,13 +22,16 @@
 //!     pub fn decrement(ctx: Context<Decrement>) -> Result<()> { ... }
 //! }
 //! ```
+//!
+//! Frameworks are selected by cargo feature: `anchor` (default), `pinocchio`
+//! or `native`. Without `anchor` the crate is `no_std`.
 
-#![cfg_attr(not(any(feature = "anchor", feature = "native")), allow(unused))]
+#![cfg_attr(not(feature = "anchor"), no_std)]
 
-#[cfg(not(any(feature = "anchor", feature = "native")))]
-compile_error!("solex: enable the `anchor` (default) or `native` feature");
+#[cfg(not(any(feature = "anchor", feature = "pinocchio", feature = "native")))]
+compile_error!("solex: enable one of the `anchor` (default), `pinocchio` or `native` features");
 
-pub use solex_macros::{active_channel, channel, declare_id, program, ships};
+pub use solex_macros::{active_channel, channel, declare_id, gated, program, ships, var};
 
 #[cfg(feature = "anchor")]
 pub use anchor_lang;
@@ -37,20 +40,49 @@ pub use anchor_lang;
 mod sys {
     pub use anchor_lang::{
         prelude::SolanaSysvar as Sysvar,
-        solana_program::{clock::Clock, msg, program_error::ProgramError, pubkey::Pubkey},
+        solana_program::{clock::Clock, program_error::ProgramError, pubkey::Pubkey},
     };
+    pub fn log_inactive(epoch: u64, current: u64) {
+        anchor_lang::solana_program::msg!(
+            "solex: feature inactive until epoch {} (now {})",
+            epoch,
+            current
+        );
+    }
 }
 
-#[cfg(all(feature = "native", not(feature = "anchor")))]
+#[cfg(all(feature = "pinocchio", not(feature = "anchor")))]
+mod sys {
+    pub use pinocchio::{
+        Address as Pubkey,
+        error::ProgramError,
+        sysvars::{Sysvar, clock::Clock},
+    };
+    pub fn log_inactive(_epoch: u64, _current: u64) {
+        // pinocchio core ships no formatting logger; the custom error code
+        // identifies the gate, and `pinocchio-log` users can wrap `epoch_reached`.
+    }
+}
+
+#[cfg(all(
+    feature = "native",
+    not(feature = "anchor"),
+    not(feature = "pinocchio")
+))]
 mod sys {
     pub use solana_clock::Clock;
-    pub use solana_msg::msg;
     pub use solana_program_error::ProgramError;
     pub use solana_pubkey::Pubkey;
     pub use solana_sysvar::Sysvar;
+    pub fn log_inactive(epoch: u64, current: u64) {
+        solana_msg::msg!(
+            "solex: feature inactive until epoch {} (now {})",
+            epoch,
+            current
+        );
+    }
 }
 
-#[cfg(any(feature = "anchor", feature = "native"))]
 pub use sys::{ProgramError, Pubkey};
 
 /// Error codes returned by Solex runtime gates, as `ProgramError::Custom`.
@@ -63,11 +95,10 @@ pub mod error {
     pub const FEATURE_NOT_ACTIVE: u32 = BASE;
 }
 
-#[cfg(any(feature = "anchor", feature = "native"))]
 mod runtime {
     use super::{
         error,
-        sys::{Clock, ProgramError, Sysvar, msg},
+        sys::{Clock, ProgramError, Sysvar, log_inactive},
     };
 
     /// Current cluster epoch from the Clock sysvar.
@@ -85,23 +116,17 @@ mod runtime {
     pub fn require_epoch(epoch: u64) -> Result<(), ProgramError> {
         let current = current_epoch()?;
         if current < epoch {
-            msg!(
-                "solex: feature inactive until epoch {} (now {})",
-                epoch,
-                current
-            );
+            log_inactive(epoch, current);
             return Err(ProgramError::Custom(error::FEATURE_NOT_ACTIVE));
         }
         Ok(())
     }
 }
 
-#[cfg(any(feature = "anchor", feature = "native"))]
 pub use runtime::{current_epoch, epoch_reached};
 
 /// Used by generated code; not part of the public API.
 #[doc(hidden)]
-#[cfg(any(feature = "anchor", feature = "native"))]
 pub mod __private {
     pub use super::runtime::require_epoch;
 
@@ -109,7 +134,15 @@ pub mod __private {
     // channel logic ran; the cargo features of *this* crate pick the framework.
     #[cfg(feature = "anchor")]
     pub use anchor_lang::{declare_id as framework_declare_id, program as framework_program};
-    #[cfg(all(feature = "native", not(feature = "anchor")))]
+    #[cfg(all(feature = "pinocchio", not(feature = "anchor")))]
+    pub use solana_address::declare_id as framework_declare_id;
+    #[cfg(all(feature = "pinocchio", not(feature = "anchor")))]
+    pub use solex_macros::passthrough_program as framework_program;
+    #[cfg(all(
+        feature = "native",
+        not(feature = "anchor"),
+        not(feature = "pinocchio")
+    ))]
     pub use solex_macros::{
         native_declare_id as framework_declare_id, passthrough_program as framework_program,
     };

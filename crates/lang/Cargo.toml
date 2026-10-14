@@ -21,6 +21,8 @@ default = ["anchor"]
 # Build on Anchor: `#[solex::program]` wraps `#[anchor_lang::program]` and
 # `declare_id!` wraps Anchor's.
 anchor = ["dep:anchor-lang"]
+# Pinocchio programs (`no_std`): `declare_id!` wraps `pinocchio::address::declare_id!`.
+pinocchio = ["dep:pinocchio", "dep:solana-address"]
 # Framework-free programs on the modular solana-* crates.
 native = [
     "dep:solana-pubkey",
@@ -33,6 +35,9 @@ native = [
 [dependencies]
 solex-macros = { workspace = true }
 anchor-lang = { version = "1", optional = true }
+pinocchio = { version = "0.11", optional = true }
+# `declare_id!` lives behind solana-address's `decode` feature.
+solana-address = { version = "2", default-features = false, features = ["decode"], optional = true }
 solana-pubkey = { version = "3", optional = true }
 solana-clock = { version = "3", optional = true }
 solana-sysvar = { version = "3", optional = true }

@@ -54,6 +54,7 @@ impl Project {
                 manifest: Manifest {
                     name,
                     program_path,
+                    build_args: Vec::new(),
                     channels,
                 },
                 path: manifest_path.to_path_buf(),

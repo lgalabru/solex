@@ -6,13 +6,16 @@ default_channel = "stable"
 [channels.stable]
 program_id = "11111111111111111111111111111111"
 cluster = "localnet"
+vars = { treasury = "stable-treasury" }
 
 [channels.nightly]
 includes = ["stable"]
 program_id = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 cluster = "localnet"
+vars = { treasury = "nightly-treasury" }
 
 [channels.canary]
 includes = ["nightly"]
 program_id = "Sysvar1111111111111111111111111111111111111"
 cluster = "localnet"
+vars = { treasury = "canary-treasury" }

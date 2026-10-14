@@ -50,6 +50,36 @@ pub fn active_channel(input: TokenStream) -> TokenStream {
     expand::active_channel(input.into()).into()
 }
 
+/// Process `#[channel(...)]` markers *inside* an item: on enum variants,
+/// struct fields, match arms and statements, where attribute macros cannot be
+/// applied directly. Excluded markers become `#[cfg(any())]`, included ones
+/// are removed. Hand-rolled instruction enums and dispatch `match`es use this.
+///
+/// ```ignore
+/// #[solex::gated]
+/// pub enum Instruction {
+///     Open = 1,
+///     #[channel(nightly)]
+///     OpenWithHooks = 10,
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn gated(attr: TokenStream, item: TokenStream) -> TokenStream {
+    expand::gated(attr.into(), item.into()).into()
+}
+
+/// Expands to the value of a per-channel variable from the manifest, as a
+/// `&'static str` literal. Fails to compile when the active channel does not
+/// define it.
+///
+/// ```ignore
+/// const TREASURY: [u8; 32] = decode_pubkey(solex::var!("treasury_owner"));
+/// ```
+#[proc_macro]
+pub fn var(input: TokenStream) -> TokenStream {
+    expand::var(input.into()).into()
+}
+
 /// Expands to a `bool` literal: whether the active channel ships `tag`.
 ///
 /// ```ignore

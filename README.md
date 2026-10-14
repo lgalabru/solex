@@ -83,6 +83,8 @@ solex deploy --channel nightly
 | `solex deploy [--channel c] [--build]` | `solana program deploy` with the channel's id, cluster and authority |
 | `solex keys list \| new \| check` | per-channel program keypairs |
 | `solex test [--channel c \| --all]` | `cargo test` with the channel selected |
+| `solex setup [--mcp]` | install the agent skill; register the MCP server with Claude Code |
+| `solex mcp` | MCP server: channels, feature matrix, builds, deploy plans |
 
 Channel selection everywhere: `--channel`, else `SOLEX_CHANNEL`, else `default_channel` in the manifest.
 
@@ -146,9 +148,51 @@ includes = ["stable"]
 
 The attribute works on functions, structs, impls and modules. Epoch gates apply to functions only. `solex::active_channel!()` and `solex::ships!(nightly)` expose the channel to your own code.
 
+### Hand-rolled dispatch: `#[solex::gated]`
+
+Attribute macros cannot sit on enum variants or `match` arms, which is where Pinocchio-style programs decide what an instruction byte means. Put `#[solex::gated]` on the enclosing item and the markers inside it resolve to `#[cfg]`:
+
+```rust
+#[solex::gated]
+#[repr(u8)]
+pub enum Instruction {
+    Open = 1,
+    #[channel(nightly)]
+    OpenWithHooks = 10,
+}
+
+#[solex::gated]
+fn process(data: &[u8]) -> ProgramResult {
+    match data[0] {
+        1 => open(),
+        #[channel(nightly)]
+        10 => open_with_hooks(),
+        _ => Err(ProgramError::InvalidInstructionData),
+    }
+}
+```
+
+Variants, fields, arms and statements take a plain tag; epoch bounds stay on functions. `#[solex::program]` applies the same pass to everything inside the module.
+
+### Per-channel constants: `solex::var!`
+
+Values that differ per deployment live next to the program id instead of in mutually exclusive cargo features:
+
+```toml
+[channels.mainnet]
+program_id = "..."
+vars = { treasury_owner = "Cs2zdfUNonRdRGsiZUQQLdTxzxVvJZmgiX2mpLYKuEqP" }
+```
+
+```rust
+const TREASURY_OWNER: [u8; 32] = decode_pubkey(solex::var!("treasury_owner"));
+```
+
+A channel without the var fails to compile, so a placeholder can never reach a real cluster. `build_args` at the top level of the manifest adds fixed `cargo build-sbf` arguments such as `["--tools-version", "v1.58", "--arch", "v3"]`.
+
 ## Frameworks
 
-`solex-lang` defaults to Anchor: `#[solex::program]` applies channel gating, then hands the module to `#[anchor_lang::program]`. With `default-features = false, features = ["native"]` the same macros work on framework-free programs. Pinocchio support is planned.
+`solex-lang` defaults to Anchor: `#[solex::program]` applies channel gating, then hands the module to `#[anchor_lang::program]`. With `default-features = false` and `features = ["pinocchio"]` the crate is `no_std`, `declare_id!` wraps `pinocchio::address::declare_id!`, and the epoch gate reads pinocchio's Clock sysvar. `features = ["native"]` targets the modular `solana-*` crates.
 
 ### For framework authors
 
@@ -168,6 +212,9 @@ The crates are split so a framework CLI can offer channels without shelling out 
 | `crates/core` | `solex-core`: build, deploy, scan and scaffold logic, reusable from other CLIs |
 | `crates/cli` | the `solex` binary (`cargo install solex`) |
 | `tests/native` | macro tests on a framework-free program with a `Solex.toml`, run once per channel |
+| `tests/pinocchio` | `no_std` compile check of the `pinocchio` feature with hand-rolled dispatch |
+| `crates/mcp` | `solex-mcp`: thin MCP server over core (`solex mcp`) |
+| `skills/solex` | agent skill (skills.sh compatible) on channels and gating; `solex setup` installs it |
 | `examples/counter` | the program `solex init` produces |
 
 ```console

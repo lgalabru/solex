@@ -46,6 +46,37 @@ impl BuildContext {
         })
     }
 
+    /// Value of a per-channel variable on the active channel.
+    pub fn var(&self, name: &str, span: Span) -> syn::Result<String> {
+        let channels = self.loaded.channels();
+        let channel = channels
+            .channel(&self.channel)
+            .map_err(|e| syn::Error::new(span, format!("solex: {e}")))?;
+        if let Some(v) = channel.vars.get(name) {
+            return Ok(v.clone());
+        }
+        let defined_on: Vec<&str> = channels
+            .channels
+            .iter()
+            .filter(|(_, c)| c.vars.contains_key(name))
+            .map(|(n, _)| n.as_str())
+            .collect();
+        let hint = if defined_on.is_empty() {
+            "no channel defines it".to_string()
+        } else {
+            format!("defined on: {}", defined_on.join(", "))
+        };
+        Err(syn::Error::new(
+            span,
+            format!(
+                "solex: channel `{}` has no var `{name}` ({hint}); add it under `vars` for \
+                 that channel in {}",
+                self.channel,
+                self.loaded.path.display()
+            ),
+        ))
+    }
+
     pub fn program_id(&self, span: Span) -> syn::Result<String> {
         let id = self
             .loaded

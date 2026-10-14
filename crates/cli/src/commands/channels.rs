@@ -32,6 +32,7 @@ impl ChannelsCommand {
                         "program_id": ch.program_id,
                         "cluster": ch.cluster,
                         "includes": ch.includes,
+                        "vars": ch.vars,
                         "ships": tags,
                         "default": active.as_deref() == Some(name.as_str()),
                     }),
@@ -67,6 +68,9 @@ impl ChannelsCommand {
             );
             let tags: Vec<_> = m.tags(name)?.into_iter().collect();
             println!("      {:<10} {}", style::dim("ships"), tags.join(", "));
+            for (k, v) in &ch.vars {
+                println!("      {:<10} {k} = {v}", style::dim("var"));
+            }
             if let Some(d) = &ch.description {
                 println!("      {:<10} {}", style::dim("about"), d);
             }

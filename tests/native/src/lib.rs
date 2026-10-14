@@ -76,3 +76,51 @@ pub mod program {
         Ok(20)
     }
 }
+
+/// Per-channel constant from the manifest.
+pub const TREASURY: &str = solex::var!("treasury");
+
+/// Hand-rolled instruction enum in the style of Pinocchio programs: variants
+/// cannot carry attribute macros, so `#[solex::gated]` resolves the markers.
+#[solex::gated]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Instruction {
+    Open = 1,
+    #[channel(nightly)]
+    OpenWithHooks = 10,
+}
+
+#[solex::gated]
+impl Instruction {
+    pub fn from_byte(b: u8) -> Option<Self> {
+        match b {
+            1 => Some(Self::Open),
+            #[channel(nightly)]
+            10 => Some(Self::OpenWithHooks),
+            _ => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Open => "open",
+            #[channel(nightly)]
+            Self::OpenWithHooks => "open_with_hooks",
+        }
+    }
+}
+
+/// Statements and nested items inside a gated fn body.
+#[solex::gated]
+#[allow(unused_mut)] // `n` is only mutated on channels shipping `nightly`
+pub fn dispatch_count() -> u8 {
+    let mut n = 1u8;
+    #[channel(nightly)]
+    let nightly_extra = 1u8;
+    #[channel(nightly)]
+    {
+        n += nightly_extra;
+    }
+    n
+}

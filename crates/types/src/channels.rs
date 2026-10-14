@@ -33,6 +33,12 @@ pub struct Channel {
     /// Free-form description shown by `solex channels`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Per-channel constants read by `solex::var!("name")` at compile time:
+    /// treasury owners, fee accounts, admin keys, anything that differs per
+    /// deployment. Missing a var on the active channel is a compile error, so
+    /// placeholders cannot leak into a real deployment.
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub vars: IndexMap<String, String>,
 }
 
 /// The `solex` configuration section: the only part a host manifest needs.

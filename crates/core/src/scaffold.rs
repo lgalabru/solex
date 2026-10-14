@@ -96,12 +96,14 @@ pub fn init(parent: &Path, opts: &InitOptions) -> Result<Created> {
                     vec![opts.channels[i - 1].clone()]
                 },
                 description: None,
+                vars: IndexMap::new(),
             },
         );
     }
     let manifest = Manifest {
         name: Some(opts.name.clone()),
         program_path: None,
+        build_args: Vec::new(),
         channels: Channels {
             default_channel: Some(opts.channels[0].clone()),
             channels,

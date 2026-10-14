@@ -19,6 +19,7 @@ rust-version = "1.85"
 solex-types = { version = "0.1.0", path = "crates/types", default-features = false }
 solex-macros = { version = "0.1.0", path = "crates/macros" }
 solex-core = { version = "0.1.0", path = "crates/core" }
+solex-mcp = { version = "0.1.0", path = "crates/mcp" }
 solex-lang = { version = "0.1.0", path = "crates/lang" }
 
 serde = { version = "1", features = ["derive"] }
@@ -32,13 +33,17 @@ ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
 proc-macro2 = "1"
 quote = "1"
-syn = { version = "2", features = ["full", "extra-traits", "visit"] }
+syn = { version = "2", features = ["full", "extra-traits", "visit", "visit-mut"] }
 walkdir = "2"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 console = "0.16"
 indicatif = "0.18"
 dirs = "6"
+rmcp = { version = "3.5", features = ["server", "transport-io", "schemars"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tempfile = "3"
 
 [workspace.lints.rust]

@@ -41,6 +41,10 @@ pub struct BuildCommand {
     /// Path to the manifest (default: search upward from the current directory)
     #[arg(long, global = true)]
     pub manifest: Option<PathBuf>,
+
+    /// Extra arguments forwarded to `cargo build-sbf` (after `--`)
+    #[arg(last = true)]
+    pub sbf_args: Vec<String>,
 }
 
 impl BuildCommand {
@@ -53,6 +57,7 @@ impl BuildCommand {
             verbose: self.verbose,
             debug: self.debug,
             tools_version: self.tools_version.clone(),
+            extra_args: self.sbf_args.clone(),
         };
 
         for channel in &channels {
