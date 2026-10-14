@@ -1,8 +1,8 @@
 ---
 name: solex
 description: |
-  Release channels for Solana programs with solex: ship one codebase as stable / nightly / canary deployments, gate instructions with #[channel(...)], epoch-gate activation, keep per-deployment constants in the manifest, and build/deploy per channel.
-  TRIGGERS: "feature gate this instruction", "ship to nightly first", "release channel", "what ships on mainnet", "solex", "Solex.toml", "Solex.yaml", "#[channel]", "promote to stable", "devnet-only instruction", "epoch activation", "deploy per cluster", "channel-gated build"
+  Release channels for Solana programs with solex: ship one codebase as stable / nightly / canary deployments, declare Cargo features per channel in Solex.toml and gate code with #[cfg(feature = ...)], epoch-gate activation, keep per-deployment constants in the manifest, and build/deploy per channel.
+  TRIGGERS: "feature gate this instruction", "ship to nightly first", "release channel", "what ships on mainnet", "solex", "Solex.toml", "Solex.yaml", "#[channel]", "[features.", "promote to stable", "devnet-only instruction", "epoch activation", "deploy per cluster", "channel-gated build"
   Use when adding, gating, promoting or auditing program features across deployments, or when a program has cfg/feature flags that select clusters or program ids.
 ---
 
@@ -10,9 +10,11 @@ description: |
 
 A channel is a deployment: its own program id, cluster and upgrade authority,
 declared once in `Solex.toml` / `Solex.yaml` or under `[solex]` in `Anchor.toml`.
-`#[channel(tag)]` compiles an item only into channels that ship that tag.
-Everything untagged ships everywhere. A build contains exactly one channel's
-features; nothing dormant is left in the binary.
+A feature is a Cargo feature of the program crate whose enablement solex
+decides per channel, declared once under `[features.<name>]` with the
+channels that ship it. Code gates on it with plain `#[cfg(feature = "...")]`.
+`solex build --channel X` passes exactly X's features, so each artifact
+contains one channel's features and nothing dormant.
 
 Why it matters: agents produce more code than a big release can absorb. Small
 increments that reach nightly first, then stable, are testable and auditable
@@ -20,59 +22,57 @@ as one diff each. The stable artifact stays small.
 
 # Core workflow
 
-1. `solex channels` to see the deployments and what each ships (`includes`).
+1. `solex channels` to see the deployments and the features each enables.
    If there is no manifest, `solex init <name>` or add a `[solex]` section.
-2. Write the change. Tag anything not ready for every channel with the channel
-   it belongs to: `#[channel(nightly)]` on the instruction handler, its accounts
-   struct, and any new state, each with the same quoted feature name. Leave
-  stable code untagged.
-3. `solex features --check` to see the item × channel matrix and catch tags no
-   channel defines. Paste the table into the PR description.
-4. `solex build --channel nightly` then `solex deploy --channel nightly`.
-5. Promote by changing the channel tag on every marker of the feature
-   (`solex features` shows the count and flags a marker left behind), or
-   remove the tag so the feature ships everywhere. Never copy code paths.
+2. Declare the feature once: `hooks = []` in `Cargo.toml` `[features]`, and in
+   the manifest:
+   ```toml
+   [features.hooks]
+   description = "V2 lifecycle hooks"
+   channels = ["devnet"]
+   ```
+3. Gate every piece of the feature with `#[cfg(feature = "hooks")]`: enum
+   variants, `match` arms, handlers, discriminators, accounts, state. A
+   missing marker is a normal compile error.
+4. `solex features --check`: one row per feature with a tick per channel, the
+   names behind it, and errors for a feature missing from `Cargo.toml`,
+   declared but unused, or a `#[channel]` tag that is not a channel. Paste
+   the table into the PR.
+5. `solex build --channel devnet`, `solex test --channel devnet`,
+   `solex deploy --channel devnet`.
+6. Promote in the manifest: add `mainnet` to `channels = [...]` (or move the
+   feature to a channel that mainnet includes). The source does not change.
 
-# Tagging rules
+# Rules
 
-- Name the feature in the attribute: `#[channel(devnet, "hooks")]`. The
-  channel says where it ships, the quoted name groups every marker of that
-  feature (variants, arms, handlers, consts) into one row of `solex features`
-  and one line of `solex channels`. Use the same name on all of them.
-- A channel `includes` the channels whose tags it also ships, so `nightly`
-  typically `includes = ["stable"]`. Clusters are channel properties, never tags.
-- `cluster = ["mainnet-beta", "devnet"]` deploys one channel to several
-  clusters. When a cluster needs its own `program_id` or `vars`, add
-  `[channels.<channel>.<cluster>]` with just the fields that differ; the
-  channel then builds once per cluster (`target/solex/<channel>/<cluster>/`)
-  and every command accepts `--cluster` to pick one. Tag-only channels (no
-  `program_id`) exist to be `include`d and are never built.
-- Untagged code is the stable surface. Tag only what is new or experimental.
-- Gate the public surface: instruction variants, dispatch arms, handlers,
-  accounts structs, new account types, new error variants. Do not gate
-  validation or security checks shared with stable paths.
-- Attribute macros cannot sit on enum variants or `match` arms. Put
-  `#[solex::gated]` on the enum, fn or impl and use `#[channel(...)]` on the
-  variants/arms inside. `#[solex::program]` does this for Anchor modules.
-- `#[channel([nightly, 850])]` compiles into nightly and returns
-  `FEATURE_NOT_ACTIVE` (`ProgramError::Custom(0x53580000)`) until epoch 850.
-  Use it to ship code ahead of a coordinated activation, like Solana feature
-  gates. Epoch bounds are valid on functions only.
+- One feature, one declaration. Never repeat "where" in the source; the
+  manifest owns it. Prefer a feature over `#[channel(nightly)]` tags unless
+  code is genuinely tied to a release train.
+- Gate the public surface, not shared checks. Validation and version checks
+  used by stable paths stay unconditional.
+- Activation epochs live in the manifest: `epoch = { mainnet = 850 }` on the
+  feature, plus `#[solex::activation("hooks")]` on the handler. It is a no-op
+  on channels without an epoch and returns `FEATURE_NOT_ACTIVE`
+  (`ProgramError::Custom(0x53580000)`) before the epoch elsewhere.
 - Per-deployment constants (treasury, admin, fee accounts) go under `vars` on
   each channel and are read with `solex::var!("name")`. A channel missing the
   var fails to compile; never keep a placeholder constant in code.
-- Outside a `#[solex::program]` or `#[solex::gated]` item, spell the attribute
-  `#[solex::channel(...)]` or `use solex::channel;` first.
+- `cluster = ["mainnet-beta", "devnet"]` deploys one channel to several
+  clusters; `[channels.<channel>.<cluster>]` overrides `program_id` or `vars`
+  for one of them, and the channel then builds once per cluster.
+- Cargo features are additive: a workspace build that enables a feature for a
+  client or test crate enables it in the program too. Build programs through
+  `solex build` (it uses `--manifest-path`) or with `--features
+  "$SOLEX_FEATURES"` from `solex env`.
 
-# Before promoting to stable
+# Before promoting
 
-- Did nightly run the instruction on devnet with real clients? Link the
+- Did the feature's channel run it on its cluster with real clients? Link the
   transactions in the PR.
-- Does promotion create a new account layout? Once stable accounts exist, a
-  rollback to a binary without that layout strands them. Promote state
-  formats deliberately and document the rollback boundary.
-- Does the IDL for stable change? Gating removes instructions from the binary;
-  regenerate and diff the IDL per channel.
+- Does promotion create a new account layout? Once accounts exist, a rollback
+  to a binary without that layout strands them. Promote state formats
+  deliberately and document the rollback boundary.
+- Does the IDL for stable change? Regenerate and diff the IDL per channel.
 - Run `solex features --json --channel stable` and confirm only intended rows
   show `ships: true`.
 
@@ -80,7 +80,7 @@ as one diff each. The stable artifact stays small.
 
 - `solex channels [--json]`: deployments, ids, clusters, vars, resolved tags.
 - `solex features [--channel c] [--items] [--json] [--check]`: what ships
-  where, one row per gate; `--items` shows every marker with file:line.
+  where, one row per feature; `--items` shows every marker with file:line.
 - `solex build --channel c [-- <cargo build-sbf args>]`: artifacts in
   `target/solex/<channel>/`. `--all` builds every channel.
 - `solex deploy --channel c [--build] [--dry-run]`: uses the channel's id,
@@ -93,7 +93,8 @@ as one diff each. The stable artifact stays small.
   pipeline (sbpf-linker, solana-verify, CI). Solex only owns the two
   environment variables `SOLEX_CHANNEL` and `SOLEX_MANIFEST`.
 - `solex keys list | new --channel c | check`: channel keypairs under `keys/`.
-- `solex test --channel c -- <cargo test args>`: tests with the channel set.
+- `solex test --channel c -- <cargo test args>`: tests with the channel set
+  and its features enabled.
 - `solex setup [--mcp]`: install this skill; register the MCP server.
 
 Channel selection everywhere: `--channel`, else `SOLEX_CHANNEL`, else

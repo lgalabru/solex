@@ -125,20 +125,39 @@ pub fn dispatch_count() -> u8 {
     n
 }
 
-/// A named feature: the string labels the item, the channel says where.
-#[channel(nightly, "hooks")]
+/// A channel-managed Cargo feature: plain `cfg`, enabled by `solex build` and
+/// `solex test` on the channels Solex.toml lists.
+#[cfg(feature = "hooks")]
 pub fn hooks_feature() -> u8 {
     7
 }
 
-/// Probe usable on every channel: `Some` only where the feature compiled in.
-#[solex::gated]
+/// The activation epoch comes from the manifest: canary gates at epoch 5,
+/// nightly has none, so this is a no-op there.
+#[cfg(feature = "hooks")]
+#[solex::activation("hooks")]
+pub fn hooks_gated() -> Result<u8, ProgramError> {
+    Ok(8)
+}
+
 pub fn hooks_feature_value() -> Option<u8> {
-    #[allow(unused_mut)]
-    let mut v = None;
-    #[channel(nightly, "hooks")]
+    #[cfg(feature = "hooks")]
     {
-        v = Some(hooks_feature());
+        Some(hooks_feature())
     }
-    v
+    #[cfg(not(feature = "hooks"))]
+    {
+        None
+    }
+}
+
+pub fn hooks_gated_value() -> Option<Result<u8, ProgramError>> {
+    #[cfg(feature = "hooks")]
+    {
+        Some(hooks_gated())
+    }
+    #[cfg(not(feature = "hooks"))]
+    {
+        None
+    }
 }

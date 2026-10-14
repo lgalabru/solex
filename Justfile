@@ -28,10 +28,11 @@ test-workspace:
     cargo test --workspace
 
 # Framework-free macro tests, compiled once per fixture channel
+# `--features hooks` mirrors what `solex test --channel <c>` would pass.
 test-native:
     cargo test --manifest-path tests/native/Cargo.toml
-    SOLEX_CHANNEL=nightly cargo test --manifest-path tests/native/Cargo.toml
-    SOLEX_CHANNEL=canary cargo test --manifest-path tests/native/Cargo.toml
+    SOLEX_CHANNEL=nightly cargo test --manifest-path tests/native/Cargo.toml --features hooks
+    SOLEX_CHANNEL=canary cargo test --manifest-path tests/native/Cargo.toml --features hooks
 
 # no_std Pinocchio compile check for the `pinocchio` feature, per channel
 test-pinocchio:

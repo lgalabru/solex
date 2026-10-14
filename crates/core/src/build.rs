@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use solex_types::{CHANNEL_ENV, CLUSTER_ENV, MANIFEST_ENV};
+use solex_types::{CHANNEL_ENV, CLUSTER_ENV, FEATURES_ENV, MANIFEST_ENV};
 
 use crate::{CoreError, Project, Result};
 
@@ -64,7 +64,25 @@ pub fn target_env(
     if let Some(c) = cluster {
         env.push((CLUSTER_ENV, c.to_string()));
     }
+    // Not read by the macros; for pipelines that need to pass `--features`.
+    if let Ok(features) = channel_features(project, channel, &[]) {
+        if !features.is_empty() {
+            env.push((FEATURES_ENV, features.join(",")));
+        }
+    }
     env
+}
+
+/// Cargo features for a channel: the manifest's channel-managed features
+/// enabled on it, plus any extra ones requested.
+pub fn channel_features(project: &Project, channel: &str, extra: &[String]) -> Result<Vec<String>> {
+    let mut features = project.channels().features_for(channel)?;
+    for f in extra {
+        if !features.contains(f) {
+            features.push(f.clone());
+        }
+    }
+    Ok(features)
 }
 
 /// The cluster a build targets, resolved from options, `SOLEX_CLUSTER` and the
@@ -90,6 +108,7 @@ pub fn build_command(project: &Project, channel: &str, opts: &BuildOptions) -> C
     let cfg = &project.manifest().build;
     let cluster = resolve_cluster(project, channel, opts).ok().flatten();
     let out_dir = project.target_out_dir(channel, cluster.as_deref());
+    let features = channel_features(project, channel, &opts.features).unwrap_or_default();
     let mut cmd = if cfg.is_build_sbf() {
         let mut cmd = Command::new("cargo");
         cmd.arg("build-sbf")
@@ -103,15 +122,15 @@ pub fn build_command(project: &Project, channel: &str, opts: &BuildOptions) -> C
         if opts.debug {
             cmd.arg("--debug");
         }
-        if !opts.features.is_empty() {
-            cmd.args(["--features", &opts.features.join(",")]);
+        if !features.is_empty() {
+            cmd.args(["--features", &features.join(",")]);
         }
         cmd
     } else {
         let mut cmd = Command::new(&cfg.command[0]);
         cmd.args(&cfg.command[1..]);
-        if !opts.features.is_empty() {
-            cmd.args(["--features", &opts.features.join(",")]);
+        if !features.is_empty() {
+            cmd.args(["--features", &features.join(",")]);
         }
         cmd
     };

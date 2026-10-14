@@ -154,6 +154,7 @@ impl SolexMcp {
                     "deployable": ch.is_deployable(),
                     "cluster": ch.cluster,
                     "includes": ch.includes,
+                    "features": channels.features_for(name).unwrap_or_default(),
                     "vars": ch.vars,
                     "ships": tags,
                     "default": default.as_deref() == Some(name.as_str()),
@@ -183,10 +184,11 @@ impl SolexMcp {
             },
             None => channels.names(),
         };
-        let items = match scan::scan_program(&project.program_dir()) {
-            Ok(i) => i,
+        let scan = match scan::scan_program(&project.program_dir(), channels) {
+            Ok(s) => s,
             Err(e) => return fail(e.to_string()),
         };
+        let items = scan.items;
         let unknown: Vec<_> = scan::unknown_tags(channels, &items)
             .into_iter()
             .map(|(tag, item)| {
@@ -219,7 +221,7 @@ impl SolexMcp {
                     .collect();
                 serde_json::json!({
                     "file": item.file, "line": item.line, "kind": item.kind,
-                    "name": item.name, "channel_attr": item.spec_text, "channels": per,
+                    "name": item.name, "feature": item.feature, "gate": item.gate_text, "channels": per,
                 })
             })
             .collect();

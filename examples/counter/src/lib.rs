@@ -21,9 +21,11 @@ pub mod counter {
         Ok(())
     }
 
-    /// Only compiled into the `nightly` channel (and channels including it), and
-    /// refuses to run until epoch 1000 even there.
-    #[channel([nightly, 1000])]
+    /// A channel-managed feature: Solex.toml enables `reset` on `nightly` (and
+    /// channels including it) and gives it an activation epoch there, so this
+    /// handler is absent from other channels and inactive until epoch 1000.
+    #[cfg(feature = "reset")]
+    #[solex::activation("reset")]
     pub fn reset(ctx: Context<Update>) -> Result<()> {
         ctx.accounts.counter.count = 0;
         Ok(())

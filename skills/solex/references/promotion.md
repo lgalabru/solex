@@ -2,10 +2,10 @@
 
 ## Promote nightly → stable
 
-1. Evidence: devnet transactions exercising the instruction, client parity
-   tests, `solex features --json --channel nightly` showing it shipped.
-2. Change the tag. Remove `#[channel(nightly)]` so the item ships everywhere,
-   or retag to `#[channel(stable)]`. Do not duplicate code paths.
+1. Evidence: devnet transactions exercising the feature, client parity tests,
+   `solex features --json --channel nightly` showing it enabled.
+2. Edit the manifest: add the target channel to `[features.<name>] channels`
+   (or move the feature to a channel the target includes). No source change.
 3. `solex features --check`, then build every channel: `solex build --all`.
 4. Regenerate the stable IDL and clients; the diff should be exactly the
    promoted instructions.
@@ -13,10 +13,10 @@
 
 ## Epoch-gated activation
 
-Ship early with `#[channel([stable, N])]`, where N is the activation epoch.
-The binary is deployed and auditable before activation; calls fail with
-`FEATURE_NOT_ACTIVE` until epoch N. Remove the bound in a later release once
-active everywhere.
+Ship early: list the channel under the feature and give it an epoch,
+`epoch = { stable = N }`, with `#[solex::activation("<name>")]` on the
+handlers. The binary is deployed and auditable before activation; calls fail
+with `FEATURE_NOT_ACTIVE` until epoch N. Remove the epoch once active.
 
 ## Rollback boundaries
 

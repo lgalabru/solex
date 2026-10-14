@@ -30,11 +30,15 @@ impl TestCommand {
         let channels = commands::select_channels(&project, self.channel.as_deref(), self.all)?;
         for channel in &channels {
             println!("  {} testing {}", style::dim("▶"), style::accent(channel));
+            let features = build::channel_features(&project, channel, &[])?;
             let mut cmd = Command::new("cargo");
             cmd.arg("test")
                 .arg("--manifest-path")
-                .arg(project.program_manifest())
-                .args(&self.args)
+                .arg(project.program_manifest());
+            if !features.is_empty() {
+                cmd.args(["--features", &features.join(",")]);
+            }
+            cmd.args(&self.args)
                 .envs(build::channel_env(&project, channel))
                 .current_dir(project.root());
             build::run(&mut cmd, "cargo test", true)?;

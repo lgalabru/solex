@@ -19,3 +19,8 @@ includes = ["nightly"]
 program_id = "Sysvar1111111111111111111111111111111111111"
 cluster = "localnet"
 vars = { treasury = "canary-treasury" }
+
+[features.hooks]
+description = "lifecycle hooks under test"
+channels = ["nightly"]
+epoch = { canary = 5 }

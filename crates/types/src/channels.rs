@@ -164,6 +164,30 @@ pub struct Channel {
     pub overrides: IndexMap<String, ClusterOverride>,
 }
 
+/// A feature: a Cargo feature of the program crate whose enablement solex
+/// decides per channel. Code gates on it with plain `#[cfg(feature = "...")]`.
+///
+/// ```toml
+/// [features.hooks]
+/// description = "V2 lifecycle hooks"
+/// channels = ["devnet"]          # enabled on devnet and on channels including it
+/// epoch = { mainnet = 850 }      # where listed, handlers marked #[solex::activation("hooks")]
+///                                # fail with FEATURE_NOT_ACTIVE before that epoch
+/// ```
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Feature {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Channels that enable the feature. A channel that `includes` one of
+    /// them enables it too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub channels: Vec<String>,
+    /// Activation epoch per channel (exact channel name, not inherited).
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub epoch: IndexMap<String, u64>,
+}
+
 /// The `solex` configuration section: the only part a host manifest needs.
 ///
 /// ```toml
@@ -189,6 +213,9 @@ pub struct Channels {
     /// and `solex features` display).
     #[serde(default)]
     pub channels: IndexMap<String, Channel>,
+    /// Channel-managed Cargo features, keyed by feature name.
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub features: IndexMap<String, Feature>,
 }
 
 impl Channels {
@@ -227,7 +254,53 @@ impl Channels {
             // `tags` walks the include graph and reports cycles.
             self.tags(name)?;
         }
+        for (name, feature) in &self.features {
+            if !is_valid_channel_name(name) {
+                return Err(Error::InvalidFeatureName(name.clone()));
+            }
+            for ch in feature.channels.iter().chain(feature.epoch.keys()) {
+                if !self.channels.contains_key(ch) {
+                    return Err(Error::FeatureUnknownChannel {
+                        feature: name.clone(),
+                        channel: ch.clone(),
+                    });
+                }
+            }
+        }
         Ok(())
+    }
+
+    pub fn feature(&self, name: &str) -> Result<&Feature> {
+        self.features
+            .get(name)
+            .ok_or_else(|| Error::UnknownFeature {
+                name: name.to_string(),
+                defined: self.features.keys().cloned().collect(),
+            })
+    }
+
+    /// Whether `channel` enables `feature`: the feature lists the channel or
+    /// one the channel includes.
+    pub fn feature_enabled(&self, feature: &str, channel: &str) -> Result<bool> {
+        let f = self.feature(feature)?;
+        let tags = self.tags(channel)?;
+        Ok(f.channels.iter().any(|c| tags.contains(c)))
+    }
+
+    /// Cargo features to enable when building `channel`, in manifest order.
+    pub fn features_for(&self, channel: &str) -> Result<Vec<String>> {
+        let tags = self.tags(channel)?;
+        Ok(self
+            .features
+            .iter()
+            .filter(|(_, f)| f.channels.iter().any(|c| tags.contains(c)))
+            .map(|(n, _)| n.clone())
+            .collect())
+    }
+
+    /// Activation epoch of `feature` on exactly `channel`, when declared.
+    pub fn activation_epoch(&self, feature: &str, channel: &str) -> Result<Option<u64>> {
+        Ok(self.feature(feature)?.epoch.get(channel).copied())
     }
 
     pub fn names(&self) -> Vec<String> {
@@ -437,6 +510,7 @@ mod tests {
         let c = Channels {
             default_channel: Some("stable".into()),
             channels,
+            features: IndexMap::new(),
         };
         c.validate().unwrap();
         c
@@ -526,6 +600,43 @@ mod tests {
             .overrides
             .insert("testnet".into(), ClusterOverride::default());
         assert!(matches!(c.validate(), Err(Error::UnknownOverride { .. })));
+    }
+
+    #[test]
+    fn features_follow_channels_and_includes() {
+        let mut c = sample();
+        c.features.insert(
+            "hooks".into(),
+            Feature {
+                description: Some("V2 hooks".into()),
+                channels: vec!["nightly".into()],
+                epoch: IndexMap::from([("canary".to_string(), 5u64)]),
+            },
+        );
+        c.validate().unwrap();
+        assert!(c.feature_enabled("hooks", "nightly").unwrap());
+        assert!(
+            c.feature_enabled("hooks", "canary").unwrap(),
+            "canary includes nightly"
+        );
+        assert!(!c.feature_enabled("hooks", "stable").unwrap());
+        assert_eq!(c.features_for("canary").unwrap(), ["hooks"]);
+        assert!(c.features_for("stable").unwrap().is_empty());
+        assert_eq!(c.activation_epoch("hooks", "canary").unwrap(), Some(5));
+        assert_eq!(c.activation_epoch("hooks", "nightly").unwrap(), None);
+        assert!(matches!(
+            c.feature("ghost"),
+            Err(Error::UnknownFeature { .. })
+        ));
+        c.features
+            .get_mut("hooks")
+            .unwrap()
+            .channels
+            .push("ghost".into());
+        assert!(matches!(
+            c.validate(),
+            Err(Error::FeatureUnknownChannel { .. })
+        ));
     }
 
     #[test]

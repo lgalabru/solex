@@ -33,6 +33,17 @@ cluster = "localnet"
 vars = { treasury_owner = "DoWeHaveAPlaceholder1111111111111111111111" }
 ```
 
+```toml
+[features.hooks]
+description = "V2 lifecycle hooks"
+channels = ["devnet"]          # enabled on devnet and on channels that include it
+epoch = { mainnet = 850 }      # #[solex::activation("hooks")] handlers gate until then
+```
+
+Every feature here must also exist in the program's `Cargo.toml` `[features]`
+(usually `hooks = []`). `solex build`, `solex test` and `solex env` enable the
+channel's features; code gates on them with `#[cfg(feature = "hooks")]`.
+
 Fields per channel: `program_id` (required to build; a channel without one is
 tag-only and exists for others to `include`), `cluster` (moniker or RPC URL,
 or a list), `keypair` (first deploy only), `upgrade_authority`, `includes`,

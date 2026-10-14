@@ -68,6 +68,21 @@ pub fn gated(attr: TokenStream, item: TokenStream) -> TokenStream {
     expand::gated(attr.into(), item.into()).into()
 }
 
+/// Gate a handler behind a feature's activation epoch from the manifest.
+///
+/// ```ignore
+/// #[cfg(feature = "hooks")]
+/// #[solex::activation("hooks")]   // no-op unless [features.hooks] epoch names this channel
+/// pub fn open_with_hooks(...) -> ProgramResult { ... }
+/// ```
+///
+/// Where `[features.hooks] epoch = { mainnet = 850 }` names the active
+/// channel, the function returns `FEATURE_NOT_ACTIVE` before epoch 850.
+#[proc_macro_attribute]
+pub fn activation(attr: TokenStream, item: TokenStream) -> TokenStream {
+    expand::activation(attr.into(), item.into()).into()
+}
+
 /// Expands to the value of a per-channel variable from the manifest, as a
 /// `&'static str` literal. Fails to compile when the active channel does not
 /// define it.

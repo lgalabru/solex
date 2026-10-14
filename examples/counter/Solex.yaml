@@ -14,3 +14,10 @@ channels:
     cluster: devnet
     includes:
     - stable
+features:
+  reset:
+    description: resets the counter; nightly-only until proven
+    channels:
+    - nightly
+    epoch:
+      nightly: 1000

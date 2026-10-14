@@ -17,6 +17,11 @@ pub const MANIFEST_ENV: &str = "SOLEX_MANIFEST";
 /// needed when the channel has per-cluster overrides.
 pub const CLUSTER_ENV: &str = "SOLEX_CLUSTER";
 
+/// Comma-separated Cargo features a channel enables. Informational: the
+/// macros do not read it; `solex env` exports it so other pipelines can pass
+/// `--features "$SOLEX_FEATURES"`.
+pub const FEATURES_ENV: &str = "SOLEX_FEATURES";
+
 /// Key under which host manifests (Anchor.toml, Quasar.toml, ...) embed the
 /// [`Channels`] section.
 pub const SECTION_KEY: &str = "solex";

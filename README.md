@@ -22,17 +22,17 @@ Agents produce code faster than anyone can review a big release. Solex keeps eve
 
 `stable`, `nightly`, `canary`, or whatever your team calls them. Each channel lists its program id, cluster and keypair, and which other channels it includes. Write it as `Solex.toml`, `Solex.yaml`, or a `[solex]` section inside `Anchor.toml` or `Quasar.toml`.
 
-### ✂️ Gated code is removed at compile time
+### ✂️ Features are Cargo features, enabled per channel
 
-A nightly instruction has no discriminator, no IDL entry and no bytes in the stable binary. There is no dormant code path on mainnet to audit or exploit.
+Declare `[features.hooks]` once in the manifest with the channels that ship it; gate code with plain `#[cfg(feature = "hooks")]`. `solex build --channel mainnet` passes exactly the features mainnet enables, so the stable binary has no dormant hooks: no discriminator, no IDL entry, no bytes.
 
 ### ⏱️ Epoch gates
 
-`#[channel([nightly, 850])]` compiles into nightly and returns `FEATURE_NOT_ACTIVE` until the cluster reaches epoch 850, the way Solana's own feature gates activate.
+`[features.hooks] epoch = { mainnet = 850 }` plus `#[solex::activation("hooks")]` on the handler: compiled in, but `FEATURE_NOT_ACTIVE` until the cluster reaches epoch 850, the way Solana's own feature gates activate.
 
 ### 🔍 What ships where, before you build
 
-`solex features` reads the sources and prints the item × channel matrix. Reviewers and auditors see the same table the compiler acts on.
+`solex features` reads the manifest and the sources and prints one row per feature with a tick per channel. Reviewers and auditors see the same table the compiler acts on, and `--check` fails on a feature that is declared but unused, unused but declared, or missing from `Cargo.toml`.
 
 ### 🚀 Build and deploy per channel
 
@@ -55,18 +55,17 @@ solex init counter --cluster stable=mainnet-beta --cluster nightly=devnet
 cd counter
 ```
 
-See what each channel ships, one row per gate:
+See what each channel ships, one row per feature:
 
 ```console
 $ solex features
 
-  counter  3 gated items in 1 file, 2 channels
+  counter  1 gated item in 1 file, 2 channels
 
-  feature  gate                         items   stable   nightly
-  ───────  ───────────────────────────  ─────  ───────  ────────
-  –        #[channel(stable)]               2     ✓        ✓
-    initialize, increment
-  reset    #[channel([nightly, 1000])]      1     –      ✓@1000
+  feature  gate                   items   stable   nightly
+  ───────  ─────────────────────  ─────  ───────  ────────
+  reset    cfg(feature = "reset")     1     –      ✓@1000
+    resets the counter; nightly-only until proven
     reset
 ```
 
@@ -98,105 +97,67 @@ Channel selection everywhere: `--channel`, else `SOLEX_CHANNEL`, else `default_c
 
 ## In the program
 
-```rust
-use anchor_lang::prelude::*;
-
-solex::declare_id!();          // program id of the channel being built
-
-#[solex::program]
-pub mod counter {
-    use super::*;
-
-    #[channel(stable)]         // stable, and nightly via `includes`
-    pub fn increment(ctx: Context<Update>) -> Result<()> { /* ... */ }
-
-    #[channel([nightly, 1000])] // nightly only, inactive before epoch 1000
-    pub fn reset(ctx: Context<Update>) -> Result<()> { /* ... */ }
-}
+```toml
+# Cargo.toml
+[features]
+hooks = []
 ```
-
-```yaml
-# Solex.yaml
-name: counter
-default_channel: stable
-channels:
-  stable:
-    program_id: 2mwKUED1kXW5nGmpTrLGbdMBe9miMkstQjUJm9vEUsqH
-    cluster: mainnet-beta
-  nightly:
-    program_id: 9rwsA9m17bLqtT1GZcjGZiWfzm4yXsu1p6w7AiAPKGMs
-    cluster: devnet
-    includes: [stable]        # nightly also ships every #[channel(stable)] item
-```
-
-The same section can live in a host manifest instead of its own file. Solex looks for `Solex.toml` / `Solex.yaml` first, then for a `solex` key in `Anchor.toml` or `Quasar.toml`, walking up from the crate being built:
 
 ```toml
-# Anchor.toml
-[solex]
-default_channel = "stable"
-program_path = "programs/counter"
+# Solex.toml
+default_channel = "localnet"
 
-[solex.channels.stable]
-program_id = "2mwKUED1kXW5nGmpTrLGbdMBe9miMkstQjUJm9vEUsqH"
+[channels.mainnet]
+program_id = "CHNLxYvV…"
 cluster = "mainnet-beta"
 
-[solex.channels.nightly]
-program_id = "9rwsA9m17bLqtT1GZcjGZiWfzm4yXsu1p6w7AiAPKGMs"
+[channels.devnet]
+includes = ["mainnet"]
+program_id = "CHNLxBtX…"
 cluster = "devnet"
-includes = ["stable"]
+
+[features.hooks]
+description = "V2 lifecycle hooks"
+channels = ["devnet"]              # enabled on devnet and on channels that include it
+epoch = { mainnet = 850 }          # if it ever ships on mainnet, inactive until epoch 850
 ```
 
-| Attribute | Meaning |
-|---|---|
-| `#[channel(stable)]` | compiled into channels that ship `stable` |
-| `#[channel(stable, nightly)]` | compiled if the channel ships any listed tag |
-| `#[channel([nightly, 850])]` | compiled into `nightly`; inactive until epoch 850 |
-| `#[channel(stable, [nightly, 850])]` | unconditional on stable, epoch-gated on a nightly-only build |
-| `#[channel(devnet, "hooks")]` | same gate, and names the feature: every marker carrying `"hooks"` is one group in `solex features` |
+```rust
+solex::declare_id!();              // program id of the channel being built
 
-A channel ships its own name and the names of every channel it `includes`, transitively. A gated feature usually touches many places (variants, dispatch arms, handlers, discriminators); give them all the same quoted name and solex treats them as one unit:
+#[cfg(feature = "hooks")]
+OpenWithHooks(OpenArgs<'a>) = 10,  // any item, variant, arm or field: plain cfg
+
+#[cfg(feature = "hooks")]
+#[solex::activation("hooks")]      // runtime epoch gate where the manifest declares one
+pub fn open_with_hooks(...) -> ProgramResult { ... }
+```
+
+Features are declared once. Moving `hooks` to mainnet is editing `channels = [...]`; no source changes, and nothing to forget. `solex build`, `solex test` and `solex env` pass the channel's features as `--features`.
 
 ```console
 $ solex features
 
-  feature  gate                items  mainnet  testnet  devnet  localnet
-  ───────  ──────────────────  ─────  ───────  ───────  ──────  ────────
-  hooks    #[channel(devnet)]     24     –        –       ✓        ✓
+  feature  gate                   items  mainnet  testnet  devnet  localnet
+  ───────  ─────────────────────  ─────  ───────  ───────  ──────  ────────
+  hooks    cfg(feature = "hooks")    24     –        –       ✓        ✓
+    V2 lifecycle hooks
     OpenWithHooks, TopUpWithHooks, DistributeWithHooks, WithdrawPayerWithHooks
     process_with_hooks ×3, load_with_hooks
     + 12 match arms, 4 consts
 ```
 
-`solex channels` lists the features each channel ships, and a feature whose markers disagree on their gate is flagged. A tag that is not a channel fails `solex features --check`.
+### Channel tags
 
-The attribute works on functions, structs, impls and modules. Epoch gates apply to functions only. `solex::active_channel!()` and `solex::ships!(nightly)` expose the channel to your own code.
+For code tied to a release train rather than a feature, `#[channel(...)]` gates directly on channel names, with the same `includes` resolution:
 
-### Hand-rolled dispatch: `#[solex::gated]`
+| Attribute | Meaning |
+|---|---|
+| `#[channel(nightly)]` | compiled into channels that ship `nightly` |
+| `#[channel(stable, nightly)]` | compiled if the channel ships any listed tag |
+| `#[channel([nightly, 850])]` | compiled into `nightly`; inactive until epoch 850 |
 
-Attribute macros cannot sit on enum variants or `match` arms, which is where Pinocchio-style programs decide what an instruction byte means. Put `#[solex::gated]` on the enclosing item and the markers inside it resolve to `#[cfg]`:
-
-```rust
-#[solex::gated]
-#[repr(u8)]
-pub enum Instruction {
-    Open = 1,
-    #[channel(nightly)]
-    OpenWithHooks = 10,
-}
-
-#[solex::gated]
-fn process(data: &[u8]) -> ProgramResult {
-    match data[0] {
-        1 => open(),
-        #[channel(nightly)]
-        10 => open_with_hooks(),
-        _ => Err(ProgramError::InvalidInstructionData),
-    }
-}
-```
-
-Variants, fields, arms and statements take a plain tag; epoch bounds stay on functions. `#[solex::program]` applies the same pass to everything inside the module.
+Attribute macros cannot sit on enum variants or `match` arms, so for those `#[solex::gated]` on the enclosing item resolves nested `#[channel]` markers; `#[solex::program]` does this for Anchor modules. Cargo features need none of this: `#[cfg]` is allowed everywhere.
 
 ### Per-channel constants: `solex::var!`
 
@@ -229,13 +190,11 @@ program_id = "CHNLxBtX…"
 vars = { treasury_owner = "4zTeC5…" }
 ```
 
-Because `var!` and `declare_id!` resolve at compile time, a channel with overrides is one artifact per cluster: `solex build --channel stable` builds `target/solex/stable/mainnet-beta/` and `target/solex/stable/devnet/`, each with `SOLEX_CLUSTER` set, and `solex deploy` sends each to its cluster. `--cluster` narrows any command to one. A build that cannot tell which cluster it is for fails instead of guessing. An override key that is not a declared cluster is a manifest error, so a misspelled field cannot pass as an override.
-
-A channel without `program_id` is tag-only: it names a surface for other channels to `include` and is never built; `--all` skips it.
+Because `var!` and `declare_id!` resolve at compile time, a channel with overrides is one artifact per cluster: `target/solex/stable/mainnet-beta/` and `target/solex/stable/devnet/`, each with `SOLEX_CLUSTER` set, and `solex deploy` sends each to its cluster. `--cluster` narrows any command to one. A channel without `program_id` is tag-only: it names a surface for other channels to `include` and is never built.
 
 ## Build pipelines
 
-Solex owns one thing at build time: the environment. The proc macros read the channel from `SOLEX_CHANNEL` (and the manifest from `SOLEX_MANIFEST`) at expansion time, so any pipeline that sets those two variables produces channel-gated output. `solex build` is a convenience over that:
+Solex owns the environment and the feature list at build time. The proc macros read `SOLEX_CHANNEL` (and `SOLEX_MANIFEST`, `SOLEX_CLUSTER`) at expansion time; the channel's features go to cargo as `--features`. `solex build` is a convenience over that:
 
 ```toml
 [build]
@@ -250,15 +209,13 @@ command = ["cargo", "+nightly", "build-bpf"]
 artifact = "target/bpfel-unknown-none/release/lib{lib}.so"   # copied to target/solex/<channel>/
 ```
 
-For a pipeline solex should not drive at all, use the environment directly:
+For a pipeline solex should not drive at all:
 
 ```sh
-eval "$(solex env --channel nightly)"            # export SOLEX_CHANNEL=... SOLEX_MANIFEST=...
-solex env --channel nightly --format dotenv       # for CI, docker --env-file, solana-verify
-solex exec --channel nightly -- cargo +nightly build-bpf
+eval "$(solex env --channel devnet)"     # SOLEX_CHANNEL, SOLEX_MANIFEST, SOLEX_FEATURES=hooks
+cargo +nightly build-bpf --features "$SOLEX_FEATURES"
+solex exec --channel devnet -- cargo test --features "$SOLEX_FEATURES"
 ```
-
-The scaffolded `build.rs` declares both variables as `rerun-if-env-changed`, so switching channels re-expands the program crate without rebuilding its dependencies.
 
 ## Frameworks
 

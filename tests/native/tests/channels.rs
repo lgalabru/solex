@@ -78,9 +78,22 @@ fn gated_enum_and_dispatch_follow_channel() {
 }
 
 #[test]
-fn named_feature_follows_its_channel_tag() {
-    // `#[channel(nightly, "hooks")]`: the name is a label, nightly decides
-    // whether `hooks_feature` exists at all.
+fn cargo_feature_follows_the_manifest() {
+    // `just test-native` passes --features hooks exactly where Solex.toml
+    // enables it, so presence must agree with the channel.
     let expected = if p::HAS_NIGHTLY { Some(7) } else { None };
     assert_eq!(p::hooks_feature_value(), expected);
+}
+
+#[test]
+fn activation_epoch_comes_from_the_manifest() {
+    match (p::CHANNEL, p::hooks_gated_value()) {
+        ("stable", None) => {}
+        // No epoch on nightly: the attribute is a no-op and the body runs.
+        ("nightly", Some(Ok(8))) => {}
+        // canary gates at epoch 5; off-chain the Clock read fails, which
+        // proves the gate ran before the body.
+        ("canary", Some(Err(solex::ProgramError::UnsupportedSysvar))) => {}
+        other => panic!("unexpected {other:?}"),
+    }
 }

@@ -10,5 +10,9 @@ publish = false
 
 [workspace]
 
+[features]
+# Channel-managed: Solex.toml enables it on nightly (and canary via includes).
+hooks = []
+
 [dependencies]
 solex-lang = { path = "../../crates/lang", default-features = false, features = ["native"] }

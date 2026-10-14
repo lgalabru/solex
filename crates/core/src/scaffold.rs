@@ -7,7 +7,7 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use solex_types::{Channel, Channels, Format, Manifest, is_valid_channel_name};
+use solex_types::{Channel, Channels, Feature, Format, Manifest, is_valid_channel_name};
 
 use crate::{CoreError, Result, keys::Keypair};
 
@@ -101,6 +101,19 @@ pub fn init(parent: &Path, opts: &InitOptions) -> Result<Created> {
             },
         );
     }
+    // The template's `reset` instruction is a channel-managed Cargo feature
+    // enabled on the second channel (and epoch-gated there) when one exists.
+    let mut features = IndexMap::new();
+    if let Some(second) = opts.channels.get(1) {
+        features.insert(
+            "reset".to_string(),
+            Feature {
+                description: Some("resets the counter; nightly-only until proven".into()),
+                channels: vec![second.clone()],
+                epoch: IndexMap::from([(second.clone(), 1000u64)]),
+            },
+        );
+    }
     let manifest = Manifest {
         name: Some(opts.name.clone()),
         program_path: None,
@@ -108,6 +121,7 @@ pub fn init(parent: &Path, opts: &InitOptions) -> Result<Created> {
         channels: Channels {
             default_channel: Some(opts.channels[0].clone()),
             channels,
+            features,
         },
     };
     manifest.validate()?;
@@ -167,7 +181,8 @@ fn write(root: &Path, files: &mut Vec<PathBuf>, rel: &str, contents: &str) -> Re
 fn manifest_text(m: &Manifest, format: Format) -> Result<String> {
     Ok(format!(
         "# Solex release channels. Each channel is a separate deployment with its own\n\
-         # program id; `includes` lists channels whose #[channel] tags also ship here.\n\
+         # program id; `includes` lists channels whose tags also ship here. Features are\n\
+         # Cargo features enabled per channel; code gates on #[cfg(feature = ...)].\n\
          # Docs: https://github.com/lgalabru/solex\n{}",
         solex_types::to_string(m, format)?
     ))
@@ -192,6 +207,8 @@ default = []
 cpi = ["no-entrypoint"]
 no-entrypoint = []
 idl-build = ["anchor-lang/idl-build"]
+# Channel-managed: enabled per channel by Solex.toml [features.reset].
+reset = []
 
 [dependencies]
 anchor-lang = "1"
@@ -230,9 +247,11 @@ fn lib_rs(module: &str, first: &str, second: Option<&str>) -> String {
     let nightly_block = match second {
         Some(ch) => format!(
             r#"
-    /// Only compiled into the `{ch}` channel (and channels including it), and
-    /// refuses to run until epoch 1000 even there.
-    #[channel([{ch}, 1000])]
+    /// A channel-managed feature: Solex.toml enables `reset` on `{ch}` (and
+    /// channels including it) and gives it an activation epoch there, so this
+    /// handler is absent from other channels and inactive until epoch 1000.
+    #[cfg(feature = "reset")]
+    #[solex::activation("reset")]
     pub fn reset(ctx: Context<Update>) -> Result<()> {{
         ctx.accounts.counter.count = 0;
         Ok(())
@@ -338,7 +357,10 @@ mod tests {
         }
         let lib = std::fs::read_to_string(created.root.join("src/lib.rs")).unwrap();
         assert!(lib.contains("pub mod demo_counter"));
-        assert!(lib.contains("#[channel([nightly, 1000])]"));
+        assert!(lib.contains("#[cfg(feature = \"reset\")]"));
+        assert!(lib.contains("#[solex::activation(\"reset\")]"));
+        assert_eq!(m.features_for("nightly").unwrap(), ["reset"]);
+        assert!(m.features_for("stable").unwrap().is_empty());
         assert!(syn::parse_file(&lib).is_ok(), "generated lib.rs must parse");
     }
 

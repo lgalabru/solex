@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::Args;
 use solex_core::{
-    CoreError, Result,
+    Channels, CoreError, Result,
     scan::{self, Cell},
 };
 
@@ -43,9 +43,13 @@ impl FeaturesCommand {
             }
             None => m.names(),
         };
-        let items = scan::scan_program(&project.program_dir())?;
-        let unknown = scan::unknown_tags(m, &items);
-        let matrix = scan::matrix(m, items, &channels)?;
+        let scan = scan::scan_program(&project.program_dir(), m)?;
+        let unknown = scan::unknown_tags(m, &scan.items);
+        let unused = scan::unused_features(m, &scan.items);
+        let undeclared =
+            scan::undeclared_in_cargo(m, &project.program_manifest()).unwrap_or_default();
+        let unmanaged = scan.unmanaged_features.clone();
+        let matrix = scan::matrix(m, scan.items, &channels)?;
 
         if self.json {
             let rows: Vec<_> = matrix
@@ -72,7 +76,7 @@ impl FeaturesCommand {
                         "kind": item.kind,
                         "name": item.name,
                         "feature": item.feature,
-                        "channel_attr": item.spec_text,
+                        "gate": item.gate_text,
                         "channels": per,
                     })
                 })
@@ -84,7 +88,34 @@ impl FeaturesCommand {
         } else if self.items {
             print_table(&matrix, &channels);
         } else {
-            print_gates(&project.name(), &matrix, &channels);
+            print_gates(&project.name(), m, &matrix, &channels);
+        }
+
+        let mut problems = 0;
+        for f in &undeclared {
+            eprintln!(
+                "  {} feature `{f}` is in the manifest but not in {} [features]; builds \
+                 enabling it will fail",
+                style::fail(),
+                project.program_manifest().display()
+            );
+            problems += 1;
+        }
+        for f in &unused {
+            eprintln!(
+                "  {} feature `{f}` is declared in the manifest but no #[cfg(feature = \"{f}\")] \
+                 uses it",
+                style::warn(),
+                f = f
+            );
+            problems += 1;
+        }
+        if !unmanaged.is_empty() {
+            eprintln!(
+                "  {} cargo features not managed by solex (never enabled by channel builds): {}",
+                style::dim("i"),
+                unmanaged.iter().cloned().collect::<Vec<_>>().join(", ")
+            );
         }
 
         if !unknown.is_empty() {
@@ -100,12 +131,12 @@ impl FeaturesCommand {
                     item.line
                 );
             }
-            if self.check {
-                return Err(CoreError::message(format!(
-                    "{} unknown feature tag(s)",
-                    unknown.len()
-                )));
-            }
+        }
+        if self.check && (problems > 0 || !unknown.is_empty()) {
+            return Err(CoreError::message(format!(
+                "{} problem(s) in channel gating",
+                problems + unknown.len()
+            )));
         }
         Ok(())
     }
@@ -126,7 +157,7 @@ fn print_table(matrix: &scan::Matrix, channels: &[String]) {
     let spec_w = matrix
         .rows
         .iter()
-        .map(|(i, _)| i.spec_text.len())
+        .map(|(i, _)| i.gate_text.len())
         .max()
         .unwrap_or(10)
         .max(10);
@@ -158,7 +189,7 @@ fn print_table(matrix: &scan::Matrix, channels: &[String]) {
         let label = format!("{} {}", style::dim(item.kind), item.name);
         // `label` carries ANSI codes, so pad by visible width.
         let pad = name_w.saturating_sub(item.kind.len() + 1 + item.name.len());
-        print!("  {label}{}  {:<spec_w$} ", " ".repeat(pad), item.spec_text);
+        print!("  {label}{}  {:<spec_w$} ", " ".repeat(pad), item.gate_text);
         for cell in cells {
             let text = match cell {
                 Cell::Excluded => style::dim("–"),
@@ -191,7 +222,7 @@ fn print_table(matrix: &scan::Matrix, channels: &[String]) {
 /// Default view: one row per feature (the quoted name in the attribute), or
 /// per distinct channel attribute for unnamed markers, so the table answers
 /// "what ships where" rather than listing dispatch plumbing.
-fn print_gates(name: &str, matrix: &scan::Matrix, channels: &[String]) {
+fn print_gates(name: &str, config: &Channels, matrix: &scan::Matrix, channels: &[String]) {
     if matrix.rows.is_empty() {
         println!("  {}", style::dim("no #[channel] attributes found"));
         return;
@@ -206,12 +237,12 @@ fn print_gates(name: &str, matrix: &scan::Matrix, channels: &[String]) {
     for (item, cells) in &matrix.rows {
         let same = groups
             .iter_mut()
-            .find(|g| g.feature == item.feature.as_deref() && g.spec == item.spec_text);
+            .find(|g| g.feature == item.feature.as_deref() && g.spec == item.gate_text);
         match same {
             Some(g) => g.items.push(item),
             None => groups.push(Group {
                 feature: item.feature.as_deref(),
-                spec: item.spec_text.as_str(),
+                spec: item.gate_text.as_str(),
                 cells,
                 items: vec![item],
             }),
@@ -280,7 +311,10 @@ fn print_gates(name: &str, matrix: &scan::Matrix, channels: &[String]) {
 
     for g in &groups {
         let feature = g.feature.unwrap_or("–");
-        let label = format!("#[channel({})]", g.spec);
+        let label = match &g.items[0].gate {
+            scan::Gate::Channel(_) => format!("#[channel({})]", g.spec),
+            scan::Gate::Cfg(_) => format!("cfg({})", g.spec),
+        };
         print!(
             "  {}  {label:<gate_w$}  {:>5}",
             style::pad_then(feature, feat_w, style::bold),
@@ -299,6 +333,13 @@ fn print_gates(name: &str, matrix: &scan::Matrix, channels: &[String]) {
             print!("  {}{text}{}", " ".repeat(left), " ".repeat(right));
         }
         println!();
+        if let Some(desc) = g
+            .feature
+            .and_then(|f| config.features.get(f))
+            .and_then(|f| f.description.as_deref())
+        {
+            println!("    {}", style::dim(desc));
+        }
         for line in summarize(&g.items) {
             println!("    {}", style::dim(&line));
         }
@@ -315,7 +356,7 @@ fn print_gates(name: &str, matrix: &scan::Matrix, channels: &[String]) {
         let specs: Vec<String> = groups
             .iter()
             .filter(|o| o.feature == Some(f))
-            .map(|o| format!("#[channel({})]", o.spec))
+            .map(|o| o.spec.to_string())
             .collect();
         if specs.len() > 1 {
             println!();

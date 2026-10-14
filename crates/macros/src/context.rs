@@ -97,6 +97,15 @@ impl BuildContext {
         ))
     }
 
+    /// Activation epoch of `feature` on the active channel, if the manifest
+    /// declares one. Unknown features are errors.
+    pub fn activation_epoch(&self, feature: &str, span: Span) -> syn::Result<Option<u64>> {
+        self.loaded
+            .channels()
+            .activation_epoch(feature, &self.channel)
+            .map_err(|e| syn::Error::new(span, format!("solex: {e}")))
+    }
+
     pub fn program_id(&self, span: Span) -> syn::Result<String> {
         let channels = self.loaded.channels();
         let channel = channels

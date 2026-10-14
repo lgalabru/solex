@@ -21,25 +21,8 @@ impl ChannelsCommand {
         let project = commands::load_project(self.manifest.as_deref())?;
         let m = project.channels();
         let active = m.resolve(None).ok();
-        // Named features per channel, from the source scan. A project without
-        // sources yet (or with unparsable ones) simply shows none.
-        let items = solex_core::scan::scan_program(&project.program_dir()).unwrap_or_default();
-        let features_on = |channel: &str| -> Vec<String> {
-            let mut out: Vec<String> = Vec::new();
-            for item in &items {
-                let Some(f) = &item.feature else { continue };
-                if out.contains(f) {
-                    continue;
-                }
-                if matches!(
-                    item.decision(m, channel),
-                    Ok(solex_core::types::spec::Decision::Include { .. })
-                ) {
-                    out.push(f.clone());
-                }
-            }
-            out
-        };
+        let features_on =
+            |channel: &str| -> Vec<String> { m.features_for(channel).unwrap_or_default() };
 
         if self.json {
             let mut out = serde_json::Map::new();
@@ -113,7 +96,12 @@ impl ChannelsCommand {
                     style::dim("features"),
                     feats
                         .iter()
-                        .map(|f| style::bold(f))
+                        .map(|f| {
+                            match m.activation_epoch(f, name).ok().flatten() {
+                                Some(e) => format!("{} (from epoch {e})", style::bold(f)),
+                                None => style::bold(f),
+                            }
+                        })
                         .collect::<Vec<_>>()
                         .join(", ")
                 );

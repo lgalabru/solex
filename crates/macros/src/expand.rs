@@ -287,6 +287,49 @@ pub fn ships(input: TokenStream) -> TokenStream {
     quote!(#value)
 }
 
+/// `#[solex::activation("hooks")]`: when the manifest gives `hooks` an
+/// activation epoch on the active channel, inject the runtime gate; otherwise
+/// leave the function untouched.
+pub fn activation(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let feature: LitStr = match syn::parse2(attr) {
+        Ok(l) => l,
+        Err(e) => {
+            return err(syn::Error::new(
+                e.span(),
+                "#[solex::activation] expects the feature name, e.g. #[solex::activation(\"hooks\")]",
+            ));
+        }
+    };
+    let ctx = match BuildContext::load(feature.span()) {
+        Ok(c) => c,
+        Err(e) => return err(e),
+    };
+    let epoch = match ctx.activation_epoch(&feature.value(), feature.span()) {
+        Ok(e) => e,
+        Err(e) => return err(e),
+    };
+    let Some(epoch) = epoch else {
+        return item;
+    };
+    let mut f: syn::ItemFn = match syn::parse2(item.clone()) {
+        Ok(f) => f,
+        Err(_) => match syn::parse2::<syn::ImplItemFn>(item) {
+            Ok(mut m) => {
+                m.block.stmts.insert(0, epoch_gate(epoch, m.sig.span()));
+                return m.into_token_stream();
+            }
+            Err(e) => {
+                return err(syn::Error::new(
+                    e.span(),
+                    "#[solex::activation] applies to functions",
+                ));
+            }
+        },
+    };
+    f.block.stmts.insert(0, epoch_gate(epoch, f.sig.span()));
+    f.into_token_stream()
+}
+
 pub fn gated(attr: TokenStream, item: TokenStream) -> TokenStream {
     if !attr.is_empty() {
         return err(syn::Error::new_spanned(

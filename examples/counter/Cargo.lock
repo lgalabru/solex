@@ -1451,7 +1451,7 @@ dependencies = [
 
 [[package]]
 name = "solex-lang"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anchor-lang",
  "solex-macros",
@@ -1459,7 +1459,7 @@ dependencies = [
 
 [[package]]
 name = "solex-macros"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bs58",
  "proc-macro2",
@@ -1470,7 +1470,7 @@ dependencies = [
 
 [[package]]
 name = "solex-types"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "indexmap",
  "proc-macro2",

@@ -22,9 +22,11 @@ mod manifest;
 #[cfg(feature = "spec")]
 pub mod spec;
 
-pub use channels::{Channel, Channels, ClusterOverride, Clusters, Resolved, is_valid_channel_name};
+pub use channels::{
+    Channel, Channels, ClusterOverride, Clusters, Feature, Resolved, is_valid_channel_name,
+};
 pub use manifest::{
-    BuildConfig, CHANNEL_ENV, CLUSTER_ENV, Format, HOST_FILES, Loaded, MANIFEST_ENV,
+    BuildConfig, CHANNEL_ENV, CLUSTER_ENV, FEATURES_ENV, Format, HOST_FILES, Loaded, MANIFEST_ENV,
     MANIFEST_FILES, Manifest, SECTION_KEY, Source, discover, find, load, parse, to_string,
 };
 
@@ -96,4 +98,10 @@ pub enum Error {
     },
     #[error("invalid channel name `{0}`: use lowercase letters, digits, `-` or `_`")]
     InvalidChannelName(String),
+    #[error("invalid feature name `{0}`: use lowercase letters, digits, `-` or `_`")]
+    InvalidFeatureName(String),
+    #[error("unknown feature `{name}`; features declared in the manifest: {}", if defined.is_empty() { "none".to_string() } else { defined.join(", ") })]
+    UnknownFeature { name: String, defined: Vec<String> },
+    #[error("feature `{feature}` refers to unknown channel `{channel}`")]
+    FeatureUnknownChannel { feature: String, channel: String },
 }
