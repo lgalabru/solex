@@ -10,6 +10,7 @@ vars = { treasury = "stable-treasury" }
 
 [channels.nightly]
 includes = ["stable"]
+features = ["hooks"]
 program_id = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 cluster = "localnet"
 vars = { treasury = "nightly-treasury" }

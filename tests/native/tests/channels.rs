@@ -76,3 +76,9 @@ fn gated_enum_and_dispatch_follow_channel() {
         assert_eq!(p::dispatch_count(), 1);
     }
 }
+
+#[test]
+fn feature_tags_follow_the_manifest() {
+    // `hooks` is declared on nightly; canary includes nightly.
+    assert_eq!(p::HAS_HOOKS, p::HAS_NIGHTLY);
+}

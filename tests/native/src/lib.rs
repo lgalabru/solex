@@ -124,3 +124,10 @@ pub fn dispatch_count() -> u8 {
     }
     n
 }
+
+/// A feature tag: the manifest says which channels ship `hooks`.
+#[channel(hooks)]
+pub const HOOKS_PRESENT: bool = true;
+#[cfg(any())]
+pub const HOOKS_PRESENT: bool = false;
+pub const HAS_HOOKS: bool = solex::ships!(hooks);

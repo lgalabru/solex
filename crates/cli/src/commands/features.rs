@@ -90,8 +90,8 @@ impl FeaturesCommand {
             eprintln!();
             for (tag, item) in &unknown {
                 eprintln!(
-                    "  {} `{tag}` in #[channel] on {} {} ({}:{}) is not a channel; this item \
-                     ships nowhere",
+                    "  {} `{tag}` on {} {} ({}:{}) is neither a channel nor a declared \
+                     feature; this item ships nowhere",
                     style::warn(),
                     item.kind,
                     style::bold(&item.name),

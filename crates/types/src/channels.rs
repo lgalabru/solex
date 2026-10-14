@@ -148,6 +148,11 @@ pub struct Channel {
     /// addition to `#[channel(nightly)]` ones.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub includes: Vec<String>,
+    /// Feature tags this channel ships, beyond its own name. Lets code say
+    /// what it is (`#[channel(lifecycle_hooks)]`) while the manifest decides
+    /// where it goes; promoting a feature is then a manifest edit.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub features: Vec<String>,
     /// Free-form description shown by `solex channels`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -219,6 +224,14 @@ impl Channels {
                     });
                 }
             }
+            for feat in &channel.features {
+                if !is_valid_channel_name(feat) {
+                    return Err(Error::InvalidFeatureName {
+                        channel: name.clone(),
+                        feature: feat.clone(),
+                    });
+                }
+            }
         }
         if let Some(def) = &self.default_channel {
             self.channel(def)?;
@@ -260,8 +273,18 @@ impl Channels {
             .ok_or_else(|| Error::MissingProgramId(name.to_string()))
     }
 
-    /// The full set of tags a channel ships: itself plus everything it
-    /// includes, transitively.
+    /// Every tag any channel ships: channel names plus declared features.
+    /// A `#[channel(...)]` tag outside this set can never compile anywhere.
+    pub fn known_tags(&self) -> BTreeSet<String> {
+        let mut out: BTreeSet<String> = self.channels.keys().cloned().collect();
+        for ch in self.channels.values() {
+            out.extend(ch.features.iter().cloned());
+        }
+        out
+    }
+
+    /// The full set of tags a channel ships: its name, its `features`, and
+    /// the same for everything it includes, transitively.
     pub fn tags(&self, name: &str) -> Result<BTreeSet<String>> {
         let mut tags = BTreeSet::new();
         let mut stack = vec![name.to_string()];
@@ -277,6 +300,7 @@ impl Channels {
     ) -> Result<()> {
         let channel = self.channel(name)?;
         tags.insert(name.to_string());
+        tags.extend(channel.features.iter().cloned());
         for inc in &channel.includes {
             if stack.iter().any(|s| s == inc) {
                 let mut cycle = stack.clone();
@@ -521,6 +545,34 @@ mod tests {
             .overrides
             .insert("testnet".into(), ClusterOverride::default());
         assert!(matches!(c.validate(), Err(Error::UnknownOverride { .. })));
+    }
+
+    #[test]
+    fn feature_tags_ship_where_the_manifest_says() {
+        let mut c = sample();
+        c.channels.get_mut("nightly").unwrap().features = vec!["lifecycle_hooks".into()];
+        c.validate().unwrap();
+        assert!(c.ships("nightly", "lifecycle_hooks").unwrap());
+        assert!(
+            c.ships("canary", "lifecycle_hooks").unwrap(),
+            "canary includes nightly"
+        );
+        assert!(!c.ships("stable", "lifecycle_hooks").unwrap());
+        assert!(c.known_tags().contains("lifecycle_hooks"));
+        assert!(!c.known_tags().contains("typo"));
+        // Promotion is a manifest edit: move the feature to stable.
+        c.channels.get_mut("nightly").unwrap().features.clear();
+        c.channels.get_mut("stable").unwrap().features = vec!["lifecycle_hooks".into()];
+        assert!(c.ships("stable", "lifecycle_hooks").unwrap());
+        assert!(
+            c.ships("nightly", "lifecycle_hooks").unwrap(),
+            "nightly includes stable"
+        );
+        c.channels.get_mut("stable").unwrap().features = vec!["Bad Name".into()];
+        assert!(matches!(
+            c.validate(),
+            Err(Error::InvalidFeatureName { .. })
+        ));
     }
 
     #[test]

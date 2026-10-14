@@ -154,6 +154,7 @@ impl SolexMcp {
                     "deployable": ch.is_deployable(),
                     "cluster": ch.cluster,
                     "includes": ch.includes,
+                    "features": ch.features,
                     "vars": ch.vars,
                     "ships": tags,
                     "default": default.as_deref() == Some(name.as_str()),

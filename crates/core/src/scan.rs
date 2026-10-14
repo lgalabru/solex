@@ -241,13 +241,14 @@ pub fn matrix(config: &Channels, items: Vec<GatedItem>, channels: &[String]) -> 
     })
 }
 
-/// Tags referenced by attributes that no channel defines: almost always a typo,
-/// and such an item would never ship anywhere.
+/// Tags that are neither a channel nor a declared feature: almost always a
+/// typo, and such an item would never ship anywhere.
 pub fn unknown_tags(config: &Channels, items: &[GatedItem]) -> Vec<(String, GatedItem)> {
+    let known = config.known_tags();
     let mut out = Vec::new();
     for item in items {
         for entry in &item.spec.entries {
-            if !config.channels.contains_key(&entry.tag) {
+            if !known.contains(&entry.tag) {
                 out.push((entry.tag.clone(), item.clone()));
             }
         }

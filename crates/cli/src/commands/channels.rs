@@ -33,6 +33,7 @@ impl ChannelsCommand {
                         "deployable": ch.is_deployable(),
                         "cluster": ch.cluster,
                         "includes": ch.includes,
+                        "features": ch.features,
                         "vars": ch.vars,
                         "overrides": ch.overrides,
                         "ships": tags,
@@ -84,6 +85,13 @@ impl ChannelsCommand {
                     ch.cluster.0.join(", ")
                 }
             );
+            if !ch.features.is_empty() {
+                println!(
+                    "      {:<10} {}",
+                    style::dim("features"),
+                    ch.features.join(", ")
+                );
+            }
             let tags: Vec<_> = m.tags(name)?.into_iter().collect();
             println!("      {:<10} {}", style::dim("ships"), tags.join(", "));
             for (k, v) in &ch.vars {
