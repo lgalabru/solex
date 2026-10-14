@@ -65,11 +65,9 @@ $ solex features
   feature  channels  gates   stable   nightly
   ───────  ────────  ─────  ───────  ────────
   reset    nightly       1     –      ✓@1000
-    resets the counter; nightly-only until proven
-    reset
 ```
 
-`--items` lists every marker with its file and line; `--json` is for tooling.
+`solex features reset` lists that feature's markers with file and line, `--items` lists all of them, `--json` is for tooling.
 
 Build and deploy a channel:
 
@@ -81,7 +79,7 @@ solex deploy --channel nightly
 | Command | Purpose |
 |---|---|
 | `solex init <name>` | scaffold a project; `--channels a,b,c`, `--cluster ch=cluster`, `--format toml` |
-| `solex features [--items] [--json] [--check]` | what ships where, one row per gate; `--items` lists every marker; `--check` fails on tags no channel defines |
+| `solex features [name] [--items] [--json] [--check]` | one row per feature; `name` lists that feature's markers; `--check` fails on undeclared, unused or untracked gating |
 | `solex channels` | channels, program ids, clusters, resolved tag sets |
 | `solex build [--channel c \| --all]` | `cargo build-sbf` into `target/solex/<channel>/` |
 | `solex deploy [--channel c] [--build]` | `solana program deploy` with the channel's id, cluster and authority |

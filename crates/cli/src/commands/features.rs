@@ -10,6 +10,10 @@ use crate::{commands, style};
 
 #[derive(Args, Debug, Default)]
 pub struct FeaturesCommand {
+    /// Show every marker of one feature, with file and line
+    #[arg(value_name = "FEATURE")]
+    pub feature: Option<String>,
+
     /// Only show this channel's column
     #[arg(long, short)]
     pub channel: Option<String>,
@@ -85,8 +89,33 @@ impl FeaturesCommand {
                 "{}",
                 serde_json::to_string_pretty(&rows).unwrap_or_default()
             );
+        } else if let Some(name) = &self.feature {
+            let rows: Vec<_> = matrix
+                .rows
+                .iter()
+                .filter(|(i, _)| i.feature.as_deref() == Some(name) || i.gate_text == *name)
+                .cloned()
+                .collect();
+            if rows.is_empty() {
+                return Err(CoreError::message(format!(
+                    "no gated items for `{name}`; features: {}",
+                    m.features.keys().cloned().collect::<Vec<_>>().join(", ")
+                )));
+            }
+            if let Some(desc) = m.features.get(name).and_then(|f| f.description.as_deref()) {
+                println!();
+                println!("  {}  {}", style::bold(name), style::dim(desc));
+            }
+            print_table(
+                &scan::Matrix {
+                    channels: matrix.channels.clone(),
+                    rows,
+                },
+                &channels,
+                false,
+            );
         } else if self.items {
-            print_table(&matrix, &channels);
+            print_table(&matrix, &channels, true);
         } else {
             print_gates(&project.name(), m, &matrix, &channels);
         }
@@ -152,7 +181,7 @@ impl FeaturesCommand {
     }
 }
 
-fn print_table(matrix: &scan::Matrix, channels: &[String]) {
+fn print_table(matrix: &scan::Matrix, channels: &[String], show_gate: bool) {
     if matrix.rows.is_empty() {
         println!("  {}", style::dim("no #[channel] attributes found"));
         return;
@@ -174,11 +203,11 @@ fn print_table(matrix: &scan::Matrix, channels: &[String]) {
     let col_w = channels.iter().map(|c| c.len()).max().unwrap_or(6).max(8);
 
     println!();
-    print!(
-        "  {}  {} ",
-        style::pad_then("item", name_w, style::bold),
-        style::pad_then("#[channel]", spec_w, style::bold)
-    );
+    print!("  {}", style::pad_then("item", name_w, style::bold));
+    if show_gate {
+        print!("  {}", style::pad_then("gate", spec_w, style::bold));
+    }
+    print!(" ");
     for ch in channels {
         let left = col_w.saturating_sub(ch.len()) / 2;
         let right = col_w.saturating_sub(ch.len() + left);
@@ -190,7 +219,11 @@ fn print_table(matrix: &scan::Matrix, channels: &[String]) {
         );
     }
     println!();
-    print!("  {}  {} ", "─".repeat(name_w), "─".repeat(spec_w));
+    print!("  {}", "─".repeat(name_w));
+    if show_gate {
+        print!("  {}", "─".repeat(spec_w));
+    }
+    print!(" ");
     for _ in channels {
         print!(" {}", "─".repeat(col_w));
     }
@@ -199,7 +232,11 @@ fn print_table(matrix: &scan::Matrix, channels: &[String]) {
         let label = format!("{} {}", style::dim(item.kind), item.name);
         // `label` carries ANSI codes, so pad by visible width.
         let pad = name_w.saturating_sub(item.kind.len() + 1 + item.name.len());
-        print!("  {label}{}  {:<spec_w$} ", " ".repeat(pad), item.gate_text);
+        print!("  {label}{}", " ".repeat(pad));
+        if show_gate {
+            print!("  {:<spec_w$}", item.gate_text);
+        }
+        print!(" ");
         for cell in cells {
             let text = match cell {
                 Cell::Excluded => style::dim("–"),
@@ -354,16 +391,6 @@ fn print_gates(name: &str, config: &Channels, matrix: &scan::Matrix, channels: &
             print!("  {}{text}{}", " ".repeat(left), " ".repeat(right));
         }
         println!();
-        if let Some(desc) = g
-            .feature
-            .and_then(|f| config.features.get(f))
-            .and_then(|f| f.description.as_deref())
-        {
-            println!("    {}", style::dim(desc));
-        }
-        for line in summarize(&g.items) {
-            println!("    {}", style::dim(&line));
-        }
     }
 
     // One feature, several gates: usually one marker was left behind.
@@ -394,67 +421,7 @@ fn print_gates(name: &str, config: &Channels, matrix: &scan::Matrix, channels: &
         style::green("✓ ships"),
         style::yellow("✓@N ships, active from epoch N"),
         style::dim("– not compiled"),
-        style::dim("--items lists every marker")
+        style::dim("solex features <name> lists a feature's markers")
     );
     println!();
-}
-
-/// Names worth reading (variants, functions, types, modules) first, then a
-/// count of the plumbing markers (match arms, discriminator consts, fields).
-fn summarize(items: &[&scan::GatedItem]) -> Vec<String> {
-    use std::collections::BTreeMap;
-    // Instruction-level names (variants, types, modules) read first; helper
-    // functions after them. Stable sort keeps source order within a rank.
-    fn rank(kind: &str) -> u8 {
-        match kind {
-            "variant" | "struct" | "enum" | "mod" => 0,
-            _ => 1,
-        }
-    }
-    let mut named: Vec<(String, &str, usize)> = Vec::new();
-    let mut plumbing: BTreeMap<&str, usize> = BTreeMap::new();
-    for item in items {
-        match item.kind {
-            "arm" | "field" | "const" => *plumbing.entry(item.kind).or_default() += 1,
-            _ => match named.iter_mut().find(|(n, _, _)| *n == item.name) {
-                Some((_, _, c)) => *c += 1,
-                None => named.push((item.name.clone(), item.kind, 1)),
-            },
-        }
-    }
-    named.sort_by_key(|(_, kind, _)| rank(kind));
-    let mut lines = Vec::new();
-    let mut current = String::new();
-    for (name, _, count) in &named {
-        let piece = if *count > 1 {
-            format!("{name} ×{count}")
-        } else {
-            name.clone()
-        };
-        if !current.is_empty() && current.len() + piece.len() + 2 > 88 {
-            lines.push(std::mem::take(&mut current));
-        }
-        if !current.is_empty() {
-            current.push_str(", ");
-        }
-        current.push_str(&piece);
-    }
-    if !current.is_empty() {
-        lines.push(current);
-    }
-    if !plumbing.is_empty() {
-        let parts: Vec<String> = plumbing
-            .iter()
-            .map(|(kind, n)| {
-                let label = match *kind {
-                    "arm" => "match arm",
-                    "const" => "const",
-                    _ => "field",
-                };
-                format!("{n} {label}{}", if *n == 1 { "" } else { "s" })
-            })
-            .collect();
-        lines.push(format!("+ {}", parts.join(", ")));
-    }
-    lines
 }
