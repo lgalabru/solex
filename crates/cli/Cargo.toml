@@ -1,6 +1,6 @@
 [package]
 name = "solex-cli"
-description = "solex CLI: release trains for Solana programs"
+description = "solex CLI: build and deploy Solana programs per release channel"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

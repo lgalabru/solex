@@ -1,6 +1,6 @@
 [package]
 name = "solex"
-description = "Release trains for Solana programs: ship features per channel with #[channel(...)]"
+description = "Ship Solana program features per release channel with #[channel(...)]"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1,56 +1,95 @@
-# solex
+<div align="center">
+  <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/lgalabru/solex/main/docs/assets/solex-github-hero-dark.png">
+      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/lgalabru/solex/main/docs/assets/solex-github-hero-light.png">
+      <img alt="SolEx. Every increment ships. Only the proven ones reach stable." style="max-width: 60%;">
+  </picture>
+</div>
 
-**Release trains for Solana programs.** *Nightly departures, stable arrivals.*
+## 🚆 Overview
 
-Agents write code faster than anyone can review a big-bang release. Solex
-makes small releases the default for Solana programs. Declare release
-channels in `Solex.yaml`, tag each change with the channel it belongs to, and
-`solex build --channel nightly` compiles exactly what that channel ships. Code
-tagged for nightly is absent from the stable binary, so the mainnet artifact
-stays small, every upgrade is a reviewable diff, and an audit covers the change
-that actually shipped.
+Solex (SOlana EXpress) ships one Solana program to several release channels. Each channel in `Solex.yaml` is its own deployment, with its own program id, cluster and upgrade authority.
 
-- **One codebase, one deployment per channel.** `stable` on mainnet, `nightly`
-  on devnet, `canary` wherever you test, each with its own program id.
-- **Gated code is removed at compile time.** A nightly instruction has no
-  discriminator, no IDL entry and no bytes in the stable binary.
-- **Epoch gates ship code ahead of activation**, the way Solana's own feature
-  gates do. `#[channel([nightly, 850])]` compiles into nightly and returns an
-  error until epoch 850.
-- **`solex features` prints what ships where**, so the reviewer and the
-  auditor read the same table the compiler used.
+Tag a change with `#[channel(nightly)]` and it compiles into the nightly binary only. Promote it to `#[channel(stable)]` once devnet has run it. Code that is not tagged for a channel is absent from that channel's artifact, so what mainnet runs is exactly what you chose to ship.
 
-> **Status:** early. The macro and CLI surface described here works end to end
-> (Anchor 1.0, `cargo build-sbf`), but expect changes.
+Agents produce code faster than anyone can review a big release. Solex keeps every upgrade small enough to test, review and audit as one diff.
 
-## Quick start
+> **Status:** early. Anchor 1.0 and `cargo build-sbf` work end to end; expect the API to move.
 
-```sh
+## 💡 Key Features
+
+### 📡 Channels in one YAML file
+
+`stable`, `nightly`, `canary`, or whatever your team calls them. Each channel lists its program id, cluster and keypair, and which other channels it includes.
+
+### ✂️ Gated code is removed at compile time
+
+A nightly instruction has no discriminator, no IDL entry and no bytes in the stable binary. There is no dormant code path on mainnet to audit or exploit.
+
+### ⏱️ Epoch gates
+
+`#[channel([nightly, 850])]` compiles into nightly and returns `FEATURE_NOT_ACTIVE` until the cluster reaches epoch 850, the way Solana's own feature gates activate.
+
+### 🔍 What ships where, before you build
+
+`solex features` reads the sources and prints the item × channel matrix. Reviewers and auditors see the same table the compiler acts on.
+
+### 🚀 Build and deploy per channel
+
+`solex build --channel nightly` and `solex deploy --channel nightly` select the channel, the program id, the cluster and the authority from the manifest. Artifacts land in `target/solex/<channel>/`.
+
+## Installation
+
+From source:
+
+```console
+git clone https://github.com/lgalabru/solex.git
+cd solex
 cargo install --path crates/cli
+solex --version
+```
+
+Requires the Solana CLI with `cargo build-sbf` for program builds.
+
+## Usage
+
+Scaffold an Anchor program with two channels and a keypair for each:
+
+```console
 solex init counter --cluster stable=mainnet-beta --cluster nightly=devnet
 cd counter
-solex features                # which items ship on which channel
-solex build --channel nightly # cargo build-sbf with the channel selected
+```
+
+See what each channel ships:
+
+```console
+$ solex features
+
+  item           #[channel]       stable   nightly
+  ─────────────  ───────────────  ──────── ────────
+  fn initialize  stable              ✓        ✓       src/lib.rs:12
+  fn increment   stable              ✓        ✓       src/lib.rs:19
+  fn reset       [nightly, 1000]     –      ✓@1000    src/lib.rs:27
+```
+
+Build and deploy a channel:
+
+```console
+solex build --channel nightly
 solex deploy --channel nightly
 ```
 
-`init` creates an Anchor program, one keypair per channel under `keys/`
-(gitignored), and this manifest:
+| Command | Purpose |
+|---|---|
+| `solex init <name>` | scaffold a project; `--channels a,b,c`, `--cluster ch=cluster` |
+| `solex features [--json] [--check]` | item × channel matrix; `--check` fails on tags no channel defines |
+| `solex channels` | channels, program ids, clusters, resolved tag sets |
+| `solex build [--channel c \| --all]` | `cargo build-sbf` into `target/solex/<channel>/` |
+| `solex deploy [--channel c] [--build]` | `solana program deploy` with the channel's id, cluster and authority |
+| `solex keys list \| new \| check` | per-channel program keypairs |
+| `solex test [--channel c \| --all]` | `cargo test` with the channel selected |
 
-```yaml
-name: counter
-default_channel: stable
-channels:
-  stable:
-    program_id: 2mwKUED1kXW5nGmpTrLGbdMBe9miMkstQjUJm9vEUsqH
-    keypair: keys/stable.json
-    cluster: mainnet-beta
-  nightly:
-    program_id: 9rwsA9m17bLqtT1GZcjGZiWfzm4yXsu1p6w7AiAPKGMs
-    keypair: keys/nightly.json
-    cluster: devnet
-    includes: [stable]        # nightly ships every #[channel(stable)] item too
-```
+Channel selection everywhere: `--channel`, else `SOLEX_CHANNEL`, else `default_channel` in the manifest.
 
 ## In the program
 
@@ -63,92 +102,60 @@ solex::declare_id!();          // program id of the channel being built
 pub mod counter {
     use super::*;
 
-    #[channel(stable)]         // on stable, and on nightly via `includes`
+    #[channel(stable)]         // stable, and nightly via `includes`
     pub fn increment(ctx: Context<Update>) -> Result<()> { /* ... */ }
 
-    #[channel([nightly, 1000])] // nightly only, and refuses to run before epoch 1000
+    #[channel([nightly, 1000])] // nightly only, inactive before epoch 1000
     pub fn reset(ctx: Context<Update>) -> Result<()> { /* ... */ }
 }
-
-// Outside a #[solex::program] module, spell the attribute with its path:
-#[solex::channel(nightly)]
-#[derive(Accounts)]
-pub struct Reset<'info> { /* ... */ }
 ```
 
-### `#[channel(...)]` grammar
+```yaml
+# Solex.yaml
+name: counter
+default_channel: stable
+channels:
+  stable:
+    program_id: 2mwKUED1kXW5nGmpTrLGbdMBe9miMkstQjUJm9vEUsqH
+    cluster: mainnet-beta
+  nightly:
+    program_id: 9rwsA9m17bLqtT1GZcjGZiWfzm4yXsu1p6w7AiAPKGMs
+    cluster: devnet
+    includes: [stable]        # nightly also ships every #[channel(stable)] item
+```
 
-| Form | Meaning |
+| Attribute | Meaning |
 |---|---|
-| `#[channel(stable)]` | compiled into channels that ship the `stable` tag |
-| `#[channel(stable, nightly)]` | compiled if the channel ships *any* listed tag |
-| `#[channel([nightly, 850])]` | compiled into `nightly`; the function returns `FEATURE_NOT_ACTIVE` until epoch 850 |
-| `#[channel(nightly = 850)]` | same as above, flatter spelling |
-| `#[channel(stable, [nightly, 850])]` | unconditional on `stable`, epoch-gated on a nightly-only build |
+| `#[channel(stable)]` | compiled into channels that ship `stable` |
+| `#[channel(stable, nightly)]` | compiled if the channel ships any listed tag |
+| `#[channel([nightly, 850])]` | compiled into `nightly`; inactive until epoch 850 |
+| `#[channel(stable, [nightly, 850])]` | unconditional on stable, epoch-gated on a nightly-only build |
 
-A channel ships its own tag plus the tags of every channel it `includes`,
-transitively. An item whose tags the channel does not ship is removed from the
-compilation entirely, so it has no discriminator, no IDL entry and no code.
-
-Epoch bounds are runtime gates: the macro injects a Clock sysvar check at the
-top of the handler, which fails with `ProgramError::Custom(0x53580000)`
-(`solex::error::FEATURE_NOT_ACTIVE`) before the activation epoch. They are only
-valid on functions.
-
-Other macros: `solex::active_channel!()` is the active channel name as a
-`&'static str`; `solex::ships!(nightly)` is a `bool` literal saying whether the
-active channel ships that tag; `solex::current_epoch()`
-and `solex::epoch_reached(n)` are available for manual checks.
-
-## CLI
-
-| Command | What it does |
-|---|---|
-| `solex init <name>` | scaffold a project; `--channels a,b,c`, `--cluster ch=cluster` |
-| `solex features [--channel c] [--json] [--check]` | static matrix of every `#[channel]` item per channel; `--check` fails on tags no channel defines |
-| `solex channels [--json]` | channels, program ids, clusters, resolved tag sets |
-| `solex build [--channel c \| --all] [--dry-run]` | `cargo build-sbf` into `target/solex/<channel>/` |
-| `solex deploy [--channel c] [--build] [--dry-run]` | `solana program deploy` with the channel's id, cluster and authority |
-| `solex keys list \| new --channel c \| check` | per-channel keypairs; `check` verifies keypairs match `program_id` |
-| `solex test [--channel c \| --all] [-- args]` | `cargo test` with the channel selected |
-| `solex channel` | print the resolved channel (for scripts) |
-
-Channel selection everywhere: `--channel`, else `SOLEX_CHANNEL`, else
-`default_channel`, else the only channel defined.
-
-## How the channel reaches the compiler
-
-The proc macros read `Solex.yaml` (found by walking up from
-`CARGO_MANIFEST_DIR`, or at `SOLEX_MANIFEST`) and `SOLEX_CHANNEL` at expansion
-time. The scaffolded `build.rs` declares both as `rerun-if-env-changed`, so
-switching channels re-expands the program crate without rebuilding its
-dependencies, and each channel gets its own output directory.
+The attribute works on functions, structs, impls and modules. Epoch gates apply to functions only. `solex::active_channel!()` and `solex::ships!(nightly)` expose the channel to your own code.
 
 ## Frameworks
 
-`solex` defaults to the `anchor` feature: `#[solex::program]` applies channel
-gating and then hands the module to `#[anchor_lang::program]`, and
-`declare_id!` wraps Anchor's. With `default-features = false, features =
-["native"]` the same macros work on framework-free programs built on the
-`solana-*` crates. Pinocchio support is planned.
+`solex` defaults to Anchor: `#[solex::program]` applies channel gating, then hands the module to `#[anchor_lang::program]`. With `default-features = false, features = ["native"]` the same macros work on framework-free programs. Pinocchio support is planned.
 
-## Repository layout
+## Architecture & How to Contribute
 
 | Crate | Purpose |
 |---|---|
-| `crates/manifest` | `Solex.yaml` model, channel/tag resolution, `#[channel]` grammar |
-| `crates/macros` | proc macros (`channel`, `program`, `declare_id`, `active_channel`, `ships`) |
-| `crates/solex` | the crate programs depend on: macros re-exported + epoch gate runtime |
-| `crates/core` | build / deploy / scan / scaffold logic, no terminal output |
-| `crates/cli` | the `solex` binary, one module per command |
-| `tests/native` | macro integration tests on a framework-free program, run once per channel |
-| `examples/counter` | Anchor program produced by `solex init` |
+| `crates/manifest` | `Solex.yaml` model, channel resolution, `#[channel]` grammar |
+| `crates/macros` | proc macros |
+| `crates/solex` | the crate programs depend on |
+| `crates/core` | build, deploy, scan and scaffold logic |
+| `crates/cli` | the `solex` binary |
+| `tests/native` | macro tests on a framework-free program, run once per channel |
+| `examples/counter` | the program `solex init` produces |
 
-```sh
-just test            # workspace tests + native tests on all three fixture channels
-just example-check   # host type-check of the Anchor example per channel
+```console
+just test            # workspace tests + native tests on every fixture channel
+just example-check   # type-check the Anchor example per channel
 just example-build   # cargo build-sbf of the example for every channel
 ```
+
+Issues and pull requests are welcome at [github.com/lgalabru/solex](https://github.com/lgalabru/solex/issues).
 
 ## License
 

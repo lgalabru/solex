@@ -9,7 +9,7 @@ mod style;
 #[command(
     name = "solex",
     version,
-    about = "Release trains for Solana programs: ship features per channel",
+    about = "Every increment ships. Only the proven ones reach stable.",
     propagate_version = true
 )]
 struct Cli {
