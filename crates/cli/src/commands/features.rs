@@ -275,9 +275,12 @@ fn print_gates(name: &str, config: &Channels, matrix: &scan::Matrix, channels: &
         .max(7);
     let gate_w = groups
         .iter()
-        .map(|g| g.spec.len() + "#[channel()]".len())
+        .map(|g| match g.feature.and_then(|f| config.features.get(f)) {
+            Some(feat) => feat.channels.join(", ").len(),
+            None => g.spec.len() + "cfg()".len(),
+        })
         .max()
-        .unwrap_or(10)
+        .unwrap_or(8)
         .max("channels".len());
     let col_w = channels.iter().map(|c| c.len()).max().unwrap_or(6).max(8);
 
@@ -311,9 +314,17 @@ fn print_gates(name: &str, config: &Channels, matrix: &scan::Matrix, channels: &
 
     for g in &groups {
         let feature = g.feature.unwrap_or("–");
-        let label = match &g.items[0].gate {
-            scan::Gate::Channel(_) => format!("#[channel({})]", g.spec),
-            scan::Gate::Cfg(_) => format!("cfg({})", g.spec),
+        // Where the feature ships, as declared: the manifest's channel list
+        // for a feature, the tags for a #[channel] gate, the predicate for
+        // anything more involved.
+        let label = match (&g.items[0].gate, g.feature) {
+            (scan::Gate::Cfg(_), Some(f)) => config
+                .features
+                .get(f)
+                .map(|feat| feat.channels.join(", "))
+                .unwrap_or_else(|| g.spec.to_string()),
+            (scan::Gate::Channel(_), _) => g.spec.to_string(),
+            (scan::Gate::Cfg(_), None) => format!("cfg({})", g.spec),
         };
         print!(
             "  {}  {label:<gate_w$}  {:>5}",

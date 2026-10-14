@@ -62,9 +62,9 @@ $ solex features
 
   counter  1 gated item in 1 file, 2 channels
 
-  feature  gate                   items   stable   nightly
-  ───────  ─────────────────────  ─────  ───────  ────────
-  reset    cfg(feature = "reset")     1     –      ✓@1000
+  feature  channels  gates   stable   nightly
+  ───────  ────────  ─────  ───────  ────────
+  reset    nightly       1     –      ✓@1000
     resets the counter; nightly-only until proven
     reset
 ```
@@ -138,9 +138,9 @@ Features are declared once. Moving `hooks` to mainnet is editing `channels = [..
 ```console
 $ solex features
 
-  feature  gate                   items  mainnet  testnet  devnet  localnet
-  ───────  ─────────────────────  ─────  ───────  ───────  ──────  ────────
-  hooks    cfg(feature = "hooks")    24     –        –       ✓        ✓
+  feature  channels  gates  mainnet  testnet  devnet  localnet
+  ───────  ────────  ─────  ───────  ───────  ──────  ────────
+  hooks    devnet       24     –        –       ✓        ✓
     V2 lifecycle hooks
     OpenWithHooks, TopUpWithHooks, DistributeWithHooks, WithdrawPayerWithHooks
     process_with_hooks ×3, load_with_hooks
