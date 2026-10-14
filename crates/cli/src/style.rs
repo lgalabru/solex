@@ -34,14 +34,6 @@ pub fn dim(s: &str) -> String {
     style(s).dim().to_string()
 }
 
-pub fn green(s: &str) -> String {
-    style(s).green().to_string()
-}
-
-pub fn yellow(s: &str) -> String {
-    style(s).yellow().to_string()
-}
-
 pub fn accent(s: &str) -> String {
     Style::new().cyan().apply_to(s).to_string()
 }
@@ -88,4 +80,28 @@ pub fn human_duration(d: std::time::Duration) -> String {
 /// styling would count escape codes as characters.
 pub fn pad_then(s: &str, width: usize, f: fn(&str) -> String) -> String {
     f(&format!("{s:<width$}"))
+}
+
+/// One stable color per channel name, so a channel reads the same everywhere.
+/// Well-known names get fixed hues; anything else hashes into the palette.
+pub fn channel_color(channel: &str, label: &str) -> String {
+    let code = match channel {
+        "stable" | "mainnet" | "mainnet-beta" | "prod" | "production" => 114, // green
+        "nightly" | "devnet" | "dev" => 215,                                  // orange
+        "canary" | "beta" => 176,                                             // magenta
+        "testnet" | "staging" => 80,                                          // cyan
+        "localnet" | "local" => 250,                                          // grey
+        other => {
+            const PALETTE: [u8; 6] = [75, 141, 173, 179, 108, 167];
+            let h = other
+                .bytes()
+                .fold(0usize, |h, b| h.wrapping_mul(31).wrapping_add(b as usize));
+            PALETTE[h % PALETTE.len()]
+        }
+    };
+    color(code, label)
+}
+
+pub fn color(code: u8, s: &str) -> String {
+    style(s).color256(code).to_string()
 }

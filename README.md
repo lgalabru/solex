@@ -32,7 +32,7 @@ Declare `[features.hooks]` once in the manifest with the channels that ship it; 
 
 ### 🔍 What ships where, before you build
 
-`solex features` reads the manifest and the sources and prints one row per feature with a tick per channel. Reviewers and auditors see the same table the compiler acts on, and `--check` fails on a feature that is declared but unused, unused but declared, or missing from `Cargo.toml`.
+`solex features` reads the manifest and the sources and prints one entry per feature with the channels it ships on, each channel in its own color. Reviewers and auditors see the same table the compiler acts on, and `--check` fails on a feature that is declared but unused, unused but declared, or missing from `Cargo.toml`.
 
 ### 🚀 Build and deploy per channel
 
@@ -60,12 +60,10 @@ See what each channel ships, one row per feature:
 ```console
 $ solex features
   ┌────────────────────────────────────────────────────────────────────────────┐
-  │ #[channel(stable)]                                                 2 gates │
-  │ stable ✓  nightly ✓                                                        │
+  │ #[channel(stable)]  stable  nightly                                2 gates │
   ├────────────────────────────────────────────────────────────────────────────┤
-  │ reset  nightly                                                      1 gate │
+  │ reset  nightly from epoch 1000                                      1 gate │
   │ resets the counter; nightly-only until proven                              │
-  │ stable -  nightly ✓ from epoch 1000                                        │
   └────────────────────────────────────────────────────────────────────────────┘
 ```
 

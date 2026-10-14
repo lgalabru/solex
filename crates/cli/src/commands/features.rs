@@ -151,20 +151,29 @@ impl FeaturesCommand {
     }
 }
 
-fn status(c: &Cell) -> boxed::Line {
-    match c {
-        Cell::Excluded => (style::dim("-"), 1),
-        Cell::Included => (style::green("✓"), 1),
-        Cell::IncludedFrom(e) => {
-            let t = format!("✓ from epoch {e}");
-            let w = t.chars().count();
-            (style::yellow(&t), w)
-        }
-    }
+/// Channel labels for the cells that ship: colored by channel, with the epoch
+/// bound riding along. Excluded channels are simply absent.
+fn ship_labels(channels: &[String], cells: &[Cell], compact: bool) -> Vec<boxed::Line> {
+    channels
+        .iter()
+        .zip(cells.iter())
+        .filter_map(|(ch, c)| match c {
+            Cell::Excluded => None,
+            Cell::Included => Some((style::channel_color(ch, ch), ch.chars().count())),
+            Cell::IncludedFrom(e) => {
+                let t = if compact {
+                    format!("{ch}@{e}")
+                } else {
+                    format!("{ch} from epoch {e}")
+                };
+                Some((style::channel_color(ch, &t), t.chars().count()))
+            }
+        })
+        .collect()
 }
 
 /// One section per feature (or per distinct channel gate for unnamed
-/// markers): name, where it ships, description, and a status per channel.
+/// markers): name, the channels it ships on, description.
 fn print_features(config: &Channels, matrix: &scan::Matrix, channels: &[String]) {
     struct Group<'a> {
         feature: Option<&'a str>,
@@ -202,17 +211,10 @@ fn print_features(config: &Channels, matrix: &scan::Matrix, channels: &[String])
                 (scan::Gate::Channel(_), None) => format!("#[channel({})]", g.spec),
                 (scan::Gate::Cfg(_), None) => format!("cfg({})", g.spec),
             };
-            let where_ = match (g.gate, g.feature) {
-                (scan::Gate::Cfg(_), Some(f)) => config
-                    .features
-                    .get(f)
-                    .map(|feat| feat.channels.join(", "))
-                    .unwrap_or_default(),
-                _ => String::new(),
-            };
             let mut head = vec![(style::bold(&name), name.chars().count())];
-            if !where_.is_empty() {
-                head.push(boxed::plain(where_));
+            head.extend(ship_labels(channels, g.cells, false));
+            if head.len() == 1 {
+                head.push((style::dim("ships nowhere"), 13));
             }
             let gates = format!("{} gate{}", g.count, if g.count == 1 { "" } else { "s" });
             let gw = gates.chars().count();
@@ -227,45 +229,22 @@ fn print_features(config: &Channels, matrix: &scan::Matrix, channels: &[String])
                     lines.push((style::dim(&seg), w));
                 }
             }
-            let statuses: Vec<boxed::Line> = channels
-                .iter()
-                .zip(g.cells.iter())
-                .map(|(ch, c)| {
-                    let (s, w) = status(c);
-                    (format!("{ch} {s}"), ch.chars().count() + 1 + w)
-                })
-                .collect();
-            lines.push(boxed::join(&statuses));
             lines
         })
         .collect();
     println!("{}", boxed::frame(&sections));
 }
 
-/// Every marker, with its location. One header section with the status per
-/// channel (identical for a single feature), then one line per marker.
+/// Every marker, with its location. For one feature, a header section names
+/// it with the channels it ships on; with `show_gate` each line carries its
+/// own labels.
 fn print_items(rows: &[&(scan::GatedItem, Vec<Cell>)], channels: &[String], show_gate: bool) {
     let mut sections: Vec<Vec<boxed::Line>> = Vec::new();
     if !show_gate {
         if let Some((first, cells)) = rows.first() {
-            let mut head = vec![(
-                style::bold(first.feature.as_deref().unwrap_or(&first.gate_text)),
-                first
-                    .feature
-                    .as_deref()
-                    .unwrap_or(&first.gate_text)
-                    .chars()
-                    .count(),
-            )];
-            let statuses: Vec<boxed::Line> = channels
-                .iter()
-                .zip(cells.iter())
-                .map(|(ch, c)| {
-                    let (s, w) = status(c);
-                    (format!("{ch} {s}"), ch.chars().count() + 1 + w)
-                })
-                .collect();
-            head.push(boxed::join(&statuses));
+            let name = first.feature.as_deref().unwrap_or(&first.gate_text);
+            let mut head = vec![(style::bold(name), name.chars().count())];
+            head.extend(ship_labels(channels, cells, false));
             let gates = format!(
                 "{} gate{}",
                 rows.len(),
@@ -286,15 +265,7 @@ fn print_items(rows: &[&(scan::GatedItem, Vec<Cell>)], channels: &[String], show
                 item.kind.chars().count() + 1 + item.name.chars().count(),
             )];
             if show_gate {
-                let statuses: Vec<boxed::Line> = channels
-                    .iter()
-                    .zip(cells.iter())
-                    .map(|(ch, c)| {
-                        let (s, w) = status(c);
-                        (format!("{ch} {s}"), ch.chars().count() + 1 + w)
-                    })
-                    .collect();
-                left.push(boxed::join(&statuses));
+                left.extend(ship_labels(channels, cells, true));
             }
             let loc = format!("{}:{}", item.file.display(), item.line);
             let lw = loc.chars().count();

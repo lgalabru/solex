@@ -50,7 +50,10 @@ impl ChannelsCommand {
         let mut sections = Vec::new();
         for (name, ch) in &m.channels {
             let mut lines: Vec<boxed::Line> = Vec::new();
-            let mut head = vec![(style::bold(name), name.chars().count())];
+            let mut head = vec![(
+                style::bold(&style::channel_color(name, name)),
+                name.chars().count(),
+            )];
             if !ch.cluster.is_empty() {
                 head.push(boxed::plain(ch.cluster.0.join(", ")));
             }
