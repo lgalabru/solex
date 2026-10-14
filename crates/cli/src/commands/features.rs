@@ -36,14 +36,6 @@ pub struct FeaturesCommand {
     pub manifest: Option<PathBuf>,
 }
 
-fn cell(c: &Cell) -> String {
-    match c {
-        Cell::Excluded => "-".into(),
-        Cell::Included => "✓".into(),
-        Cell::IncludedFrom(e) => format!("✓@{e}"),
-    }
-}
-
 impl FeaturesCommand {
     pub fn execute(&self) -> Result<()> {
         let project = commands::load_project(self.manifest.as_deref())?;
@@ -250,31 +242,65 @@ fn print_features(config: &Channels, matrix: &scan::Matrix, channels: &[String])
     println!("{}", boxed::frame(&sections));
 }
 
-/// Every marker, with its location.
+/// Every marker, with its location. One header section with the status per
+/// channel (identical for a single feature), then one line per marker.
 fn print_items(rows: &[&(scan::GatedItem, Vec<Cell>)], channels: &[String], show_gate: bool) {
-    let mut headers = vec!["item"];
-    if show_gate {
-        headers.push("gate");
+    let mut sections: Vec<Vec<boxed::Line>> = Vec::new();
+    if !show_gate {
+        if let Some((first, cells)) = rows.first() {
+            let mut head = vec![(
+                style::bold(first.feature.as_deref().unwrap_or(&first.gate_text)),
+                first
+                    .feature
+                    .as_deref()
+                    .unwrap_or(&first.gate_text)
+                    .chars()
+                    .count(),
+            )];
+            let statuses: Vec<boxed::Line> = channels
+                .iter()
+                .zip(cells.iter())
+                .map(|(ch, c)| {
+                    let (s, w) = status(c);
+                    (format!("{ch} {s}"), ch.chars().count() + 1 + w)
+                })
+                .collect();
+            head.push(boxed::join(&statuses));
+            let gates = format!(
+                "{} gate{}",
+                rows.len(),
+                if rows.len() == 1 { "" } else { "s" }
+            );
+            let gw = gates.chars().count();
+            sections.push(vec![boxed::split(
+                boxed::join(&head),
+                (style::dim(&gates), gw),
+            )]);
+        }
     }
-    headers.extend(channels.iter().map(String::as_str));
-    headers.push("location");
-    let mut align = vec![style::Align::Left];
-    if show_gate {
-        align.push(style::Align::Left);
-    }
-    align.extend(channels.iter().map(|_| style::Align::Center));
-    align.push(style::Align::Left);
-    let table_rows: Vec<Vec<String>> = rows
+    let lines: Vec<boxed::Line> = rows
         .iter()
         .map(|(item, cells)| {
-            let mut row = vec![format!("{} {}", item.kind, item.name)];
+            let mut left = vec![(
+                format!("{} {}", style::dim(item.kind), item.name),
+                item.kind.chars().count() + 1 + item.name.chars().count(),
+            )];
             if show_gate {
-                row.push(item.gate_text.clone());
+                let statuses: Vec<boxed::Line> = channels
+                    .iter()
+                    .zip(cells.iter())
+                    .map(|(ch, c)| {
+                        let (s, w) = status(c);
+                        (format!("{ch} {s}"), ch.chars().count() + 1 + w)
+                    })
+                    .collect();
+                left.push(boxed::join(&statuses));
             }
-            row.extend(cells.iter().map(cell));
-            row.push(format!("{}:{}", item.file.display(), item.line));
-            row
+            let loc = format!("{}:{}", item.file.display(), item.line);
+            let lw = loc.chars().count();
+            boxed::split(boxed::join(&left), (style::dim(&loc), lw))
         })
         .collect();
-    print!("{}", style::table(&headers, &table_rows, &align));
+    sections.push(lines);
+    println!("{}", boxed::frame(&sections));
 }
