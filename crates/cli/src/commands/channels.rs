@@ -62,6 +62,10 @@ impl ChannelsCommand {
                     style::accent(name),
                     style::dim("(tag only: included by other channels, never built)")
                 );
+                if let Some(d) = &ch.description {
+                    println!("      {:<10} {}", style::dim("about"), d);
+                }
+                continue;
             } else {
                 println!("  {marker} {}", style::accent(name));
                 println!(
