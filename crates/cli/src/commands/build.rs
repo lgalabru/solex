@@ -125,6 +125,15 @@ impl BuildCommand {
                     style::dim(&style::human_size(out.size)),
                     style::dim(&style::human_duration(out.elapsed)),
                 );
+                // Features the channel enabled, colored like everywhere else.
+                let features = build::channel_features(&project, channel, &opts.features)?;
+                if !features.is_empty() {
+                    let labels: Vec<String> = features
+                        .iter()
+                        .map(|f| style::channel_color(channel, f))
+                        .collect();
+                    println!("    {} {}", style::dim("features"), labels.join(" "));
+                }
                 println!("    {}", style::dim(&out.so_path.display().to_string()));
             }
         }
