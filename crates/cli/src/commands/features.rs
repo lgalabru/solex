@@ -6,7 +6,7 @@ use solex_core::{
     scan::{self, Cell},
 };
 
-use crate::{commands, style};
+use crate::{boxed, commands, style};
 
 #[derive(Args, Debug, Default)]
 pub struct FeaturesCommand {
@@ -159,7 +159,20 @@ impl FeaturesCommand {
     }
 }
 
-/// One row per feature (or per distinct channel gate for unnamed markers).
+fn status(c: &Cell) -> boxed::Line {
+    match c {
+        Cell::Excluded => (style::dim("-"), 1),
+        Cell::Included => (style::green("✓"), 1),
+        Cell::IncludedFrom(e) => {
+            let t = format!("✓ from epoch {e}");
+            let w = t.chars().count();
+            (style::yellow(&t), w)
+        }
+    }
+}
+
+/// One section per feature (or per distinct channel gate for unnamed
+/// markers): name, where it ships, description, and a status per channel.
 fn print_features(config: &Channels, matrix: &scan::Matrix, channels: &[String]) {
     struct Group<'a> {
         feature: Option<&'a str>,
@@ -185,35 +198,56 @@ fn print_features(config: &Channels, matrix: &scan::Matrix, channels: &[String])
         }
     }
     if groups.is_empty() {
-        println!("no gated items");
+        println!("  {}", style::dim("no gated items"));
         return;
     }
-    let mut headers = vec!["feature", "channels", "gates"];
-    headers.extend(channels.iter().map(String::as_str));
-    let mut align = vec![style::Align::Left, style::Align::Left, style::Align::Right];
-    align.extend(channels.iter().map(|_| style::Align::Center));
-    let rows: Vec<Vec<String>> = groups
+    let sections: Vec<Vec<boxed::Line>> = groups
         .iter()
         .map(|g| {
+            let mut lines = Vec::new();
+            let name = match (g.gate, g.feature) {
+                (_, Some(f)) => f.to_string(),
+                (scan::Gate::Channel(_), None) => format!("#[channel({})]", g.spec),
+                (scan::Gate::Cfg(_), None) => format!("cfg({})", g.spec),
+            };
             let where_ = match (g.gate, g.feature) {
                 (scan::Gate::Cfg(_), Some(f)) => config
                     .features
                     .get(f)
                     .map(|feat| feat.channels.join(", "))
-                    .unwrap_or_else(|| g.spec.to_string()),
-                (scan::Gate::Channel(_), _) => g.spec.to_string(),
-                (scan::Gate::Cfg(_), None) => format!("cfg({})", g.spec),
+                    .unwrap_or_default(),
+                _ => String::new(),
             };
-            let mut row = vec![
-                g.feature.unwrap_or("-").to_string(),
-                where_,
-                g.count.to_string(),
-            ];
-            row.extend(g.cells.iter().map(cell));
-            row
+            let mut head = vec![(style::bold(&name), name.chars().count())];
+            if !where_.is_empty() {
+                head.push(boxed::plain(where_));
+            }
+            let gates = format!("{} gate{}", g.count, if g.count == 1 { "" } else { "s" });
+            let gw = gates.chars().count();
+            lines.push(boxed::split(boxed::join(&head), (style::dim(&gates), gw)));
+            if let Some(d) = g
+                .feature
+                .and_then(|f| config.features.get(f))
+                .and_then(|f| f.description.as_deref())
+            {
+                for seg in boxed::wrap(d, boxed::INNER) {
+                    let w = seg.chars().count();
+                    lines.push((style::dim(&seg), w));
+                }
+            }
+            let statuses: Vec<boxed::Line> = channels
+                .iter()
+                .zip(g.cells.iter())
+                .map(|(ch, c)| {
+                    let (s, w) = status(c);
+                    (format!("{ch} {s}"), ch.chars().count() + 1 + w)
+                })
+                .collect();
+            lines.push(boxed::join(&statuses));
+            lines
         })
         .collect();
-    print!("{}", style::table(&headers, &rows, &align));
+    println!("{}", boxed::frame(&sections));
 }
 
 /// Every marker, with its location.

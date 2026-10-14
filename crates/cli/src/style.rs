@@ -34,6 +34,14 @@ pub fn dim(s: &str) -> String {
     style(s).dim().to_string()
 }
 
+pub fn green(s: &str) -> String {
+    style(s).green().to_string()
+}
+
+pub fn yellow(s: &str) -> String {
+    style(s).yellow().to_string()
+}
+
 pub fn accent(s: &str) -> String {
     Style::new().cyan().apply_to(s).to_string()
 }
@@ -86,7 +94,6 @@ pub fn pad_then(s: &str, width: usize, f: fn(&str) -> String) -> String {
 pub enum Align {
     Left,
     Center,
-    Right,
 }
 
 /// Plain `+---+` table, no colors inside so widths stay honest.
@@ -112,7 +119,6 @@ pub fn table(headers: &[&str], rows: &[Vec<String>], align: &[Align]) -> String 
             let pad = widths[i].saturating_sub(width(cell));
             let (left, right) = match align.get(i).copied().unwrap_or(Align::Left) {
                 Align::Left => (0, pad),
-                Align::Right => (pad, 0),
                 Align::Center => (pad / 2, pad - pad / 2),
             };
             l.push(' ');

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::Args;
 use solex_core::Result;
 
-use crate::{commands, style};
+use crate::{boxed, commands, style};
 
 #[derive(Args, Debug, Default)]
 pub struct ChannelsCommand {
@@ -47,58 +47,73 @@ impl ChannelsCommand {
             return Ok(());
         }
 
-        let mut rows = Vec::new();
+        let mut sections = Vec::new();
         for (name, ch) in &m.channels {
-            let label = if active.as_deref() == Some(name.as_str()) {
-                format!("{name} *")
+            let mut lines: Vec<boxed::Line> = Vec::new();
+            let mut head = vec![(style::bold(name), name.chars().count())];
+            if !ch.cluster.is_empty() {
+                head.push(boxed::plain(ch.cluster.0.join(", ")));
+            }
+            if !ch.is_deployable() {
+                head.push((style::dim("tag only"), 8));
+            }
+            let right = if active.as_deref() == Some(name.as_str()) {
+                (style::accent("default"), 7)
             } else {
-                name.clone()
+                boxed::plain("")
             };
-            let program = if ch.is_deployable() {
-                let mut ids: Vec<String> = Vec::new();
-                if let Some(id) = &ch.program_id {
-                    ids.push(id.clone());
+            lines.push(boxed::split(boxed::join(&head), right));
+            if let Some(d) = &ch.description {
+                for seg in boxed::wrap(d, boxed::INNER) {
+                    let w = seg.chars().count();
+                    lines.push((style::dim(&seg), w));
                 }
+            }
+            if let Some(id) = &ch.program_id {
+                let mut parts = vec![boxed::plain(boxed::short(id))];
                 for (cluster, o) in &ch.overrides {
-                    if let Some(id) = &o.program_id {
-                        ids.push(format!("{id} ({cluster})"));
+                    if let Some(oid) = &o.program_id {
+                        parts.push(boxed::plain(format!("{cluster}: {}", boxed::short(oid))));
                     }
                 }
-                ids.join(", ")
-            } else {
-                "(tag only)".into()
-            };
-            let mut vars: Vec<String> = ch.vars.iter().map(|(k, v)| format!("{k}={v}")).collect();
-            for (cluster, o) in &ch.overrides {
-                vars.extend(o.vars.iter().map(|(k, v)| format!("{k}={v} ({cluster})")));
+                lines.push(boxed::field("program", boxed::join(&parts)));
             }
-            let feats = features_on(name)
-                .iter()
-                .map(|f| match m.activation_epoch(f, name).ok().flatten() {
-                    Some(e) => format!("{f}@{e}"),
-                    None => f.clone(),
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-            rows.push(vec![
-                label,
-                program,
-                ch.cluster.0.join(", "),
-                ch.includes.join(", "),
-                feats,
-                vars.join(", "),
-            ]);
+            if !ch.includes.is_empty() {
+                lines.push(boxed::field(
+                    "includes",
+                    boxed::plain(ch.includes.join(", ")),
+                ));
+            }
+            let feats = features_on(name);
+            if !feats.is_empty() {
+                let parts: Vec<boxed::Line> = feats
+                    .iter()
+                    .map(|f| match m.activation_epoch(f, name).ok().flatten() {
+                        Some(e) => boxed::plain(format!("{f} (from epoch {e})")),
+                        None => boxed::plain(f.clone()),
+                    })
+                    .collect();
+                lines.push(boxed::field("features", boxed::join(&parts)));
+            }
+            if !ch.vars.is_empty() || ch.overrides.values().any(|o| !o.vars.is_empty()) {
+                let mut parts: Vec<boxed::Line> = ch
+                    .vars
+                    .iter()
+                    .map(|(k, v)| boxed::plain(format!("{k} = {}", boxed::short(v))))
+                    .collect();
+                for (cluster, o) in &ch.overrides {
+                    for (k, v) in &o.vars {
+                        parts.push(boxed::plain(format!(
+                            "{k} = {} ({cluster})",
+                            boxed::short(v)
+                        )));
+                    }
+                }
+                lines.push(boxed::field("vars", boxed::join(&parts)));
+            }
+            sections.push(lines);
         }
-        print!(
-            "{}",
-            style::table(
-                &[
-                    "channel", "program", "cluster", "includes", "features", "vars"
-                ],
-                &rows,
-                &[style::Align::Left; 6],
-            )
-        );
+        println!("{}", boxed::frame(&sections));
         Ok(())
     }
 }

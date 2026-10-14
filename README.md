@@ -59,12 +59,14 @@ See what each channel ships, one row per feature:
 
 ```console
 $ solex features
-+---------+----------+-------+--------+---------+
-| feature | channels | gates | stable | nightly |
-+---------+----------+-------+--------+---------+
-| -       | stable   |     2 |   ✓    |    ✓    |
-| reset   | nightly  |     1 |   -    | ✓@1000  |
-+---------+----------+-------+--------+---------+
+  ┌────────────────────────────────────────────────────────────────────────────┐
+  │ #[channel(stable)]                                                 2 gates │
+  │ stable ✓  nightly ✓                                                        │
+  ├────────────────────────────────────────────────────────────────────────────┤
+  │ reset  nightly                                                      1 gate │
+  │ resets the counter; nightly-only until proven                              │
+  │ stable -  nightly ✓ from epoch 1000                                        │
+  └────────────────────────────────────────────────────────────────────────────┘
 ```
 
 `solex features reset` lists that feature's markers with file and line, `--items` lists all of them, `--json` is for tooling.

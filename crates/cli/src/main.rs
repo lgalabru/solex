@@ -2,6 +2,7 @@
 
 use clap::{CommandFactory, Parser, Subcommand};
 
+mod boxed;
 mod commands;
 mod style;
 
