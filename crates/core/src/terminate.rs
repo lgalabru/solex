@@ -1,4 +1,4 @@
-//! Tear a channel down: `solana program close` reclaims the ProgramData rent
+//! Terminate a channel: `solana program close` reclaims the ProgramData rent
 //! and leaves the program address permanently non-executable.
 
 use std::{path::PathBuf, process::Command};
@@ -6,7 +6,7 @@ use std::{path::PathBuf, process::Command};
 use crate::{CoreError, Project, Result, build, keys};
 
 #[derive(Debug, Clone, Default)]
-pub struct CloseOptions {
+pub struct TerminateOptions {
     /// Override the channel's cluster / RPC URL.
     pub url: Option<String>,
     /// Upgrade authority (defaults to the channel's, then the Solana CLI default).
@@ -18,7 +18,7 @@ pub struct CloseOptions {
 }
 
 #[derive(Debug, Clone)]
-pub struct ClosePlan {
+pub struct TerminatePlan {
     pub channel: String,
     pub program_id: String,
     pub cluster: Option<String>,
@@ -30,7 +30,7 @@ pub struct ClosePlan {
     pub is_mainnet: bool,
 }
 
-impl ClosePlan {
+impl TerminatePlan {
     pub fn command(&self) -> Command {
         let mut cmd = Command::new("solana");
         cmd.args(["program", "close"]);
@@ -52,7 +52,7 @@ impl ClosePlan {
     }
 }
 
-pub fn plan(project: &Project, channel: &str, opts: &CloseOptions) -> Result<ClosePlan> {
+pub fn plan(project: &Project, channel: &str, opts: &TerminateOptions) -> Result<TerminatePlan> {
     let channels = project.channels();
     let ch = channels.channel(channel)?;
     let program_id = channels.program_id(channel)?.to_string();
@@ -65,7 +65,7 @@ pub fn plan(project: &Project, channel: &str, opts: &CloseOptions) -> Result<Clo
     let is_mainnet = cluster
         .as_deref()
         .is_some_and(|c| c.contains("mainnet") || c == "m");
-    Ok(ClosePlan {
+    Ok(TerminatePlan {
         channel: channel.to_string(),
         program_id,
         cluster,
@@ -81,7 +81,7 @@ pub fn plan(project: &Project, channel: &str, opts: &CloseOptions) -> Result<Clo
 }
 
 /// Execute the plan. Returns the Solana CLI output.
-pub fn close(plan: &ClosePlan, verbose: bool) -> Result<String> {
+pub fn terminate(plan: &TerminatePlan, verbose: bool) -> Result<String> {
     let mut cmd = plan.command();
     build::run(&mut cmd, "solana program close", verbose)
 }

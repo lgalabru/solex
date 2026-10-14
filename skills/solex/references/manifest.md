@@ -6,7 +6,12 @@ Standalone `Solex.toml` (or `Solex.yaml` with the same keys):
 name = "payment_channels"          # optional, defaults to the Cargo package name
 default_channel = "localnet"
 program_path = "program/payment_channels"   # optional, defaults to the manifest dir
-build_args = ["--tools-version", "v1.58", "--arch", "v3"]
+
+[build]                                      # optional; default is cargo build-sbf
+args = ["--tools-version", "v1.58", "--arch", "v3"]
+# For another pipeline, e.g. sbpf-linker:
+# command = ["cargo", "+nightly", "build-bpf"]
+# artifact = "target/bpfel-unknown-none/release/lib{lib}.so"
 
 [channels.mainnet]
 program_id = "CHNLxYvVA28MJP9PrFuDXccuoGXAx7jBacfLEkahyGsX"

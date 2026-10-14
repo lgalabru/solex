@@ -3,14 +3,15 @@ use std::path::PathBuf;
 use clap::Args;
 use solex_core::{
     CoreError, Result,
-    close::{self, CloseOptions},
+    terminate::{self, TerminateOptions},
 };
 
 use crate::{commands, style};
 
-/// Close a channel's program (or the authority's buffers) and reclaim rent.
+/// Terminate a channel: close its program (or the authority's buffers) and
+/// reclaim the rent. The address can never execute code again.
 #[derive(Args, Debug, Default)]
-pub struct CloseCommand {
+pub struct TerminateCommand {
     /// Channel to close (default: SOLEX_CHANNEL or the manifest default)
     #[arg(long, short)]
     pub channel: Option<String>,
@@ -35,7 +36,7 @@ pub struct CloseCommand {
     #[arg(long)]
     pub dry_run: bool,
 
-    /// Actually close. Without it the plan is printed and nothing is sent.
+    /// Actually terminate. Without it the plan is printed and nothing is sent.
     #[arg(long)]
     pub yes: bool,
 
@@ -52,17 +53,17 @@ pub struct CloseCommand {
     pub manifest: Option<PathBuf>,
 }
 
-impl CloseCommand {
+impl TerminateCommand {
     pub fn execute(&self) -> Result<()> {
         let project = commands::load_project(self.manifest.as_deref())?;
         let channel = project.channels().resolve(self.channel.as_deref())?;
-        let opts = CloseOptions {
+        let opts = TerminateOptions {
             url: self.url.clone(),
             authority: self.authority.clone(),
             recipient: self.recipient.clone(),
             buffers: self.buffers,
         };
-        let plan = close::plan(&project, &channel, &opts)?;
+        let plan = terminate::plan(&project, &channel, &opts)?;
 
         println!();
         println!(
@@ -122,13 +123,13 @@ impl CloseCommand {
         }
         if plan.is_mainnet && !self.allow_mainnet {
             return Err(CoreError::message(format!(
-                "channel `{}` targets mainnet; pass --allow-mainnet together with --yes to close it",
+                "channel `{}` targets mainnet; pass --allow-mainnet together with --yes to terminate it",
                 plan.channel
             )));
         }
 
-        let sp = style::spinner("Closing...");
-        let r = close::close(&plan, self.verbose);
+        let sp = style::spinner("Terminating...");
+        let r = terminate::terminate(&plan, self.verbose);
         sp.finish_and_clear();
         let out = r?;
         let reclaimed = out
@@ -137,7 +138,7 @@ impl CloseCommand {
             .map(str::trim)
             .unwrap_or("done");
         println!(
-            "  {} Closed {} on {}: {}",
+            "  {} Terminated {} on {}: {}",
             style::ok(),
             style::accent(&plan.channel),
             plan.cluster.as_deref().unwrap_or("default cluster"),

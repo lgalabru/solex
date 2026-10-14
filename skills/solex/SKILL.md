@@ -73,6 +73,13 @@ as one diff each. The stable artifact stays small.
   `target/solex/<channel>/`. `--all` builds every channel.
 - `solex deploy --channel c [--build] [--dry-run]`: uses the channel's id,
   cluster and authority. Always show the user the dry run first.
+- `solex terminate --channel c [--buffers]`: prints the `solana program close`
+  plan; only `--yes` sends it, and mainnet also needs `--allow-mainnet`.
+  Terminating a program is permanent. Never pass `--yes` unless the user asked.
+- `solex env --channel c [--format dotenv|json]` and
+  `solex exec --channel c -- <cmd>`: select a channel for any other build
+  pipeline (sbpf-linker, solana-verify, CI). Solex only owns the two
+  environment variables `SOLEX_CHANNEL` and `SOLEX_MANIFEST`.
 - `solex keys list | new --channel c | check`: channel keypairs under `keys/`.
 - `solex test --channel c -- <cargo test args>`: tests with the channel set.
 - `solex setup [--mcp]`: install this skill; register the MCP server.

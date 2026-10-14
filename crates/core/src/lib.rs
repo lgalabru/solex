@@ -7,12 +7,12 @@
 use std::path::PathBuf;
 
 pub mod build;
-pub mod close;
 pub mod deploy;
 pub mod keys;
 pub mod project;
 pub mod scaffold;
 pub mod scan;
+pub mod terminate;
 
 pub use project::Project;
 pub use solex_types::{self as types, BuildConfig, Channel, Channels, Manifest};

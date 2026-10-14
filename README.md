@@ -81,6 +81,9 @@ solex deploy --channel nightly
 | `solex channels` | channels, program ids, clusters, resolved tag sets |
 | `solex build [--channel c \| --all]` | `cargo build-sbf` into `target/solex/<channel>/` |
 | `solex deploy [--channel c] [--build]` | `solana program deploy` with the channel's id, cluster and authority |
+| `solex terminate [--channel c] [--buffers] --yes` | `solana program close`: reclaim ProgramData or buffer rent; mainnet needs `--allow-mainnet` |
+| `solex env [--format shell\|dotenv\|json]` | the channel environment for other build pipelines |
+| `solex exec [--channel c] -- <cmd>` | run any command with the channel selected |
 | `solex keys list \| new \| check` | per-channel program keypairs |
 | `solex test [--channel c \| --all]` | `cargo test` with the channel selected |
 | `solex setup [--mcp]` | install the agent skill; register the MCP server with Claude Code |
@@ -188,7 +191,34 @@ vars = { treasury_owner = "Cs2zdfUNonRdRGsiZUQQLdTxzxVvJZmgiX2mpLYKuEqP" }
 const TREASURY_OWNER: [u8; 32] = decode_pubkey(solex::var!("treasury_owner"));
 ```
 
-A channel without the var fails to compile, so a placeholder can never reach a real cluster. `build_args` at the top level of the manifest adds fixed `cargo build-sbf` arguments such as `["--tools-version", "v1.58", "--arch", "v3"]`.
+A channel without the var fails to compile, so a placeholder can never reach a real cluster.
+
+## Build pipelines
+
+Solex owns one thing at build time: the environment. The proc macros read the channel from `SOLEX_CHANNEL` (and the manifest from `SOLEX_MANIFEST`) at expansion time, so any pipeline that sets those two variables produces channel-gated output. `solex build` is a convenience over that:
+
+```toml
+[build]
+# default pipeline: cargo build-sbf, with --manifest-path and --sbf-out-dir added
+args = ["--tools-version", "v1.58", "--arch", "v3"]
+```
+
+```toml
+[build]
+# upstream rustc + sbpf-linker (github.com/blueshift-gg/sbpf-linker)
+command = ["cargo", "+nightly", "build-bpf"]
+artifact = "target/bpfel-unknown-none/release/lib{lib}.so"   # copied to target/solex/<channel>/
+```
+
+For a pipeline solex should not drive at all, use the environment directly:
+
+```sh
+eval "$(solex env --channel nightly)"            # export SOLEX_CHANNEL=... SOLEX_MANIFEST=...
+solex env --channel nightly --format dotenv       # for CI, docker --env-file, solana-verify
+solex exec --channel nightly -- cargo +nightly build-bpf
+```
+
+The scaffolded `build.rs` declares both variables as `rerun-if-env-changed`, so switching channels re-expands the program crate without rebuilding its dependencies.
 
 ## Frameworks
 
