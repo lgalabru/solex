@@ -43,9 +43,11 @@ test-pinocchio:
 build:
     cargo build --release -p solex
 
-# Install the CLI locally
-install:
+# Install the CLI locally (`just install` or `just install solex`)
+install name="solex":
+    @[ "{{name}}" = "solex" ] || { echo "only the solex CLI is installable (got {{name}})"; exit 1; }
     cargo install --path crates/cli --force
+    solex --version
 
 # Type-check the Anchor example on the host for every channel
 example-check:
