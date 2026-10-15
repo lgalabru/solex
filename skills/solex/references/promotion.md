@@ -30,11 +30,11 @@ with `FEATURE_NOT_ACTIVE` until epoch N. Remove the epoch once active.
 
 ## Other build pipelines
 
-`solex build` is `cargo build-sbf` with `SOLEX_CHANNEL` and `SOLEX_MANIFEST`
-set. Configure `[build] command` / `artifact` in the manifest to let it drive
-sbpf-linker or a custom script, or export the variables yourself with
+`solex build` is `cargo build-sbf --features "$SOLEX_FEATURES"` with
+`SOLEX_CHANNEL` and `SOLEX_MANIFEST` set. Configure `[build] command` /
+`artifact` in the manifest to let it drive sbpf-linker or a custom script, or export the variables yourself with
 `solex env` / `solex exec`. Verified builds (`solana-verify`) must receive the
-same two variables inside the container.
+same variables inside the container.
 
 ## CI
 

@@ -1,9 +1,9 @@
 ---
 name: solex
 description: |
-  Release channels for Solana programs with solex: ship one codebase as stable / canary / canary deployments, declare Cargo features per channel in Solex.toml and gate code with #[cfg(feature = ...)], epoch-gate activation, keep per-deployment constants in the manifest, and build/deploy per channel.
+  Release channels for Solana programs with solex: ship one codebase as stable / canary deployments, declare Cargo features per channel in Solex.toml and gate code with #[cfg(feature = ...)], epoch-gate activation, keep per-deployment constants in the manifest, and build/deploy per channel.
   TRIGGERS: "feature gate this instruction", "ship to canary first", "release channel", "what ships on mainnet", "solex", "Solex.toml", "Solex.yaml", "#[channel]", "[features.", "promote to stable", "devnet-only instruction", "epoch activation", "deploy per cluster", "channel-gated build"
-  Use when adding, gating, promoting or auditing program features across deployments, or when a program has cfg/feature flags that select clusters or program ids.
+  Use when adding a feature to a channel, gating, promoting or auditing program features across deployments, or when a program has cfg/feature flags that select clusters or program ids.
 ---
 
 # solex: release channels for Solana programs
@@ -29,19 +29,47 @@ as one diff each. The stable artifact stays small.
    ```toml
    [features.hooks]
    description = "V2 lifecycle hooks"
-   channels = ["devnet"]
+   channels = ["canary"]
    ```
 3. Gate every piece of the feature with `#[cfg(feature = "hooks")]`: enum
    variants, `match` arms, handlers, discriminators, accounts, state. A
    missing marker is a normal compile error.
-4. `solex features --check`: one row per feature with a tick per channel, the
-   names behind it, and errors for a feature missing from `Cargo.toml`,
-   declared but unused, or a `#[channel]` tag that is not a channel. Paste
-   the table into the PR.
-5. `solex build --channel devnet`, `solex test --channel devnet`,
-   `solex deploy --channel devnet`.
-6. Promote in the manifest: add `mainnet` to `channels = [...]` (or move the
-   feature to a channel that mainnet includes). The source does not change.
+4. `solex features --check`: one block per feature with the channels that
+   ship it and its gate count; errors for a feature missing from
+   `Cargo.toml`, declared but unused, a `#[channel]` tag that is not a
+   channel, or a `build.rs` that does not watch `SOLEX_*`. Paste the output
+   into the PR.
+5. `solex build --canary`, `solex test --canary`, `solex deploy --canary`
+   (any channel name works as a flag; `--channel canary` is the long form).
+6. Promote in the manifest: add `stable` to `channels = [...]`. The source
+   does not change.
+
+# Adding a feature to a channel
+
+Two different asks; check which one the user means.
+
+**A new feature** (code that does not exist yet) touches three places, all
+required:
+
+| Where | What | Why |
+|---|---|---|
+| `Cargo.toml` | `hooks = []` under `[features]` | cargo must know the feature; solex passes `--features hooks` |
+| manifest | `[features.hooks] channels = ["canary"]` | the only place that says where it ships |
+| source | `#[cfg(feature = "hooks")]` on every variant, arm, handler, account | nothing dormant in other channels |
+
+Then `solex features --check` and `solex features hooks` (lists every marker
+with file:line) to confirm the gates match the manifest. Add
+`#[solex::activation("hooks")]` on handlers only if an `epoch` is declared.
+
+**An existing feature on another channel** is a manifest-only change: add the
+channel to `[features.hooks] channels`. Remember `includes`: a feature on
+`stable` is also on every channel that includes `stable`, so adding it to a
+base channel enables it everywhere above. Rebuild that channel, regenerate its
+IDL and clients, and follow the promotion checklist when the target is a
+production channel.
+
+Never gate with `#[channel(canary)]` to "add a feature": that repeats the
+"where" on every marker and is exactly what the manifest exists to avoid.
 
 # Rules
 
@@ -50,7 +78,7 @@ as one diff each. The stable artifact stays small.
   code is genuinely tied to a release train.
 - Gate the public surface, not shared checks. Validation and version checks
   used by stable paths stay unconditional.
-- Activation epochs live in the manifest: `epoch = { mainnet = 850 }` on the
+- Activation epochs live in the manifest: `epoch = { stable = 850 }` on the
   feature, plus `#[solex::activation("hooks")]` on the handler. It is a no-op
   on channels without an epoch and returns `FEATURE_NOT_ACTIVE`
   (`ProgramError::Custom(0x53580000)`) before the epoch elsewhere.
@@ -80,10 +108,11 @@ as one diff each. The stable artifact stays small.
 
 - `solex channels [--json]`: deployments, ids, clusters, vars, resolved tags.
 - `solex features [name] [--channel c] [--items] [--json] [--check]`: one
-  row per feature; `solex features hooks` lists that feature's markers with
-  file:line; `--items` lists all markers.
+  block per feature with the channels that ship it; `solex features hooks`
+  lists that feature's markers with file:line; `--items` lists all markers.
 - `solex build --channel c [-- <cargo build-sbf args>]`: artifacts in
-  `target/solex/<channel>/`. `--all` builds every channel.
+  `target/solex/<channel>/`; prints the features enabled. `--all` builds
+  every channel. Every command taking `--channel c` also accepts `--c`.
 - `solex deploy --channel c [--build] [--dry-run]`: uses the channel's id,
   cluster and authority. Always show the user the dry run first.
 - `solex terminate --channel c [--buffers]`: prints the `solana program close`
@@ -91,8 +120,9 @@ as one diff each. The stable artifact stays small.
   Terminating a program is permanent. Never pass `--yes` unless the user asked.
 - `solex env --channel c [--format dotenv|json]` and
   `solex exec --channel c -- <cmd>`: select a channel for any other build
-  pipeline (sbpf-linker, solana-verify, CI). Solex only owns the two
-  environment variables `SOLEX_CHANNEL` and `SOLEX_MANIFEST`.
+  pipeline (sbpf-linker, solana-verify, CI). Solex owns `SOLEX_CHANNEL`,
+  `SOLEX_MANIFEST`, `SOLEX_FEATURES` and, with per-cluster overrides,
+  `SOLEX_CLUSTER`.
 - `solex keys list | new --channel c | check`: channel keypairs under `keys/`.
 - `solex test --channel c -- <cargo test args>`: tests with the channel set
   and its features enabled.
