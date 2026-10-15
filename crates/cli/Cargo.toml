@@ -23,6 +23,7 @@ solex-types = { workspace = true, features = ["yaml", "toml", "spec"] }
 clap = { workspace = true }
 clap_complete = { workspace = true }
 console = { workspace = true }
+indexmap = { workspace = true }
 dialoguer = { workspace = true }
 indicatif = { workspace = true }
 serde_json = { workspace = true }

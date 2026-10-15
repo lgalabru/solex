@@ -101,21 +101,33 @@ impl ChannelsCommand {
                     .collect();
                 lines.push(boxed::field("features", boxed::join(&parts)));
             }
-            if !ch.vars.is_empty() || ch.overrides.values().any(|o| !o.vars.is_empty()) {
-                let mut parts: Vec<boxed::Line> = ch
-                    .vars
-                    .iter()
+            // The channel's vars on the label line; each cluster override on
+            // its own continuation line so long sets do not overflow the box.
+            let var_parts = |vars: &indexmap::IndexMap<String, String>| -> Vec<boxed::Line> {
+                vars.iter()
                     .map(|(k, v)| boxed::plain(format!("{k} = {}", components::short(v))))
-                    .collect();
-                for (cluster, o) in &ch.overrides {
-                    for (k, v) in &o.vars {
-                        parts.push(boxed::plain(format!(
-                            "{k} = {} ({cluster})",
-                            components::short(v)
-                        )));
-                    }
+                    .collect()
+            };
+            let mut var_lines: Vec<boxed::Line> = Vec::new();
+            if !ch.vars.is_empty() {
+                var_lines.push(boxed::join(&var_parts(&ch.vars)));
+            }
+            for (cluster, o) in &ch.overrides {
+                if !o.vars.is_empty() {
+                    let mut parts = vec![boxed::styled(
+                        style::dim(&format!("{cluster}:")),
+                        &format!("{cluster}:"),
+                    )];
+                    parts.extend(var_parts(&o.vars));
+                    var_lines.push(boxed::join(&parts));
                 }
-                lines.push(boxed::field("vars", boxed::join(&parts)));
+            }
+            for (i, line) in var_lines.into_iter().enumerate() {
+                lines.push(if i == 0 {
+                    boxed::field("vars", line)
+                } else {
+                    boxed::continuation(line)
+                });
             }
             sections.push(lines);
         }

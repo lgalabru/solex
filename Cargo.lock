@@ -2154,6 +2154,7 @@ dependencies = [
  "clap_complete",
  "console",
  "dialoguer",
+ "indexmap",
  "indicatif",
  "serde_json",
  "solex-core",

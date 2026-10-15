@@ -55,27 +55,79 @@ impl KeysCommand {
     }
 }
 
+/// One program address to account for: a channel, or a cluster override of
+/// it that declares its own `program_id`.
+struct Target {
+    channel: String,
+    cluster: Option<String>,
+    program_id: String,
+    keypair: PathBuf,
+}
+
+fn targets(project: &solex_core::Project) -> Vec<Target> {
+    let m = project.channels();
+    let mut out = Vec::new();
+    for name in m.names() {
+        let Ok(ch) = m.channel(&name) else { continue };
+        if let Some(id) = &ch.program_id {
+            out.push(Target {
+                channel: name.clone(),
+                cluster: None,
+                program_id: id.clone(),
+                keypair: project.channel_keypair(&name).unwrap_or_default(),
+            });
+        }
+        for (cluster, o) in &ch.overrides {
+            if let Some(id) = &o.program_id {
+                let keypair = match &o.keypair {
+                    Some(p) => project.resolve_path(p),
+                    None => project
+                        .root()
+                        .join("keys")
+                        .join(format!("{name}-{cluster}.json")),
+                };
+                out.push(Target {
+                    channel: name.clone(),
+                    cluster: Some(cluster.clone()),
+                    program_id: id.clone(),
+                    keypair,
+                });
+            }
+        }
+    }
+    out
+}
+
+fn target_head(t: &Target, status: Option<String>) -> Vec<boxed::Line> {
+    let mut head = Vec::new();
+    if let Some(s) = status {
+        head.push(boxed::styled(s, "x"));
+    }
+    head.push(boxed::styled(
+        style::bold(&components::channel(&t.channel)),
+        &t.channel,
+    ));
+    if let Some(c) = &t.cluster {
+        head.push(boxed::plain(c));
+    }
+    head
+}
+
 fn list(args: &KeysArgs) -> Result<()> {
     let project = commands::load_project(args.manifest.as_deref())?;
-    let m = project.channels();
-    let sections: Vec<Vec<boxed::Line>> = m
-        .names()
+    let sections: Vec<Vec<boxed::Line>> = targets(&project)
         .iter()
-        .map(|name| {
-            let kp = project.channel_keypair(name).unwrap_or_default();
-            let on_disk = if kp.is_file() {
-                components::rel(project.root(), &kp)
+        .map(|t| {
+            let on_disk = if t.keypair.is_file() {
+                components::rel(project.root(), &t.keypair)
             } else {
                 "none on disk (upgrades only)".into()
             };
             boxed::section(
-                &[boxed::styled(style::bold(&components::channel(name)), name)],
+                &target_head(t, None),
                 boxed::plain(""),
                 &[
-                    (
-                        "program",
-                        boxed::plain(m.program_id(name).unwrap_or("(unset)")),
-                    ),
+                    ("program", boxed::plain(t.program_id.clone())),
                     ("keypair", boxed::plain(on_disk)),
                 ],
             )
@@ -161,27 +213,30 @@ fn new(args: &NewArgs) -> Result<()> {
 
 fn check(args: &KeysArgs) -> Result<()> {
     let project = commands::load_project(args.manifest.as_deref())?;
-    let m = project.channels();
     let mut failures: Vec<String> = Vec::new();
     let mut sections: Vec<Vec<boxed::Line>> = Vec::new();
-    for name in m.names() {
-        let declared = m.program_id(&name)?.to_string();
-        let path = project.channel_keypair(&name)?;
-        let (status, detail) = match keys::validate_pubkey(&declared) {
+    for t in targets(&project) {
+        let label = match &t.cluster {
+            Some(c) => format!("{} ({c})", t.channel),
+            None => t.channel.clone(),
+        };
+        let declared = &t.program_id;
+        let path = &t.keypair;
+        let (status, detail) = match keys::validate_pubkey(declared) {
             Err(reason) => {
                 failures.push(format!(
-                    "{name}: program_id `{declared}` is invalid: {reason}"
+                    "{label}: program_id `{declared}` is invalid: {reason}"
                 ));
                 (style::fail(), format!("invalid program_id: {reason}"))
             }
             Ok(()) if !path.is_file() => (style::ok(), "no keypair on disk (upgrades only)".into()),
             Ok(()) => {
-                let actual = keys::pubkey_of(&path)?;
-                if actual == declared {
-                    (style::ok(), components::rel(project.root(), &path))
+                let actual = keys::pubkey_of(path)?;
+                if &actual == declared {
+                    (style::ok(), components::rel(project.root(), path))
                 } else {
                     failures.push(format!(
-                        "{name}: keypair {} is for {actual}, manifest says {declared}",
+                        "{label}: keypair {} is for {actual}, manifest says {declared}",
                         path.display()
                     ));
                     (
@@ -189,20 +244,17 @@ fn check(args: &KeysArgs) -> Result<()> {
                         format!(
                             "keypair is for {}, manifest says {}",
                             components::short(&actual),
-                            components::short(&declared)
+                            components::short(declared)
                         ),
                     )
                 }
             }
         };
         sections.push(boxed::section(
-            &[
-                boxed::styled(status, "x"),
-                boxed::styled(style::bold(&components::channel(&name)), &name),
-            ],
+            &target_head(&t, Some(status)),
             boxed::plain(""),
             &[
-                ("program", boxed::plain(declared)),
+                ("program", boxed::plain(declared.clone())),
                 ("keypair", boxed::plain(detail)),
             ],
         ));
@@ -211,7 +263,7 @@ fn check(args: &KeysArgs) -> Result<()> {
     if !failures.is_empty() {
         components::print_notice(
             components::NoticeLevel::Error,
-            &format!("{} channel(s) failed the check", failures.len()),
+            &format!("{} program address(es) failed the check", failures.len()),
             &failures.join("\n"),
         );
         return Err(CoreError::Reported { code: 1 });

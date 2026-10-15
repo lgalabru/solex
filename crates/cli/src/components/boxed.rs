@@ -88,6 +88,14 @@ pub fn field(label: &str, value: Line) -> Line {
     )
 }
 
+/// A second value line under a field, indented past the label column.
+pub fn continuation(value: Line) -> Line {
+    (
+        format!("{} {}", " ".repeat(FIELD_LABEL), value.0),
+        FIELD_LABEL + 1 + value.1,
+    )
+}
+
 /// A styled fragment with its visible width taken from `plain`.
 pub fn styled(styled: String, plain: &str) -> Line {
     (styled, plain.chars().count())
