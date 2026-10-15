@@ -36,7 +36,8 @@ test-native:
 
 # no_std Pinocchio compile check for the `pinocchio` feature, per channel
 test-pinocchio:
-    SOLEX_CHANNEL=mainnet cargo check --manifest-path tests/pinocchio/Cargo.toml
+    SOLEX_CHANNEL=mainnet SOLEX_CLUSTER=mainnet-beta cargo check --manifest-path tests/pinocchio/Cargo.toml
+    SOLEX_CHANNEL=mainnet SOLEX_CLUSTER=testnet cargo check --manifest-path tests/pinocchio/Cargo.toml
     SOLEX_CHANNEL=devnet cargo check --manifest-path tests/pinocchio/Cargo.toml
 
 # Build the CLI

@@ -1061,6 +1061,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 
 [[package]]
+name = "libyaml-rs"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e126dda6f34391ab7b444f9922055facc83c07a910da3eb16f1e4d9c45dc777"
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1496,19 +1502,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf41e0cfaf7226dca15e8197172c295a782857fcb97fad1808a166870dee75a3"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "serde_yaml"
-version = "0.9.34+deprecated"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
-dependencies = [
- "indexmap",
- "itoa",
- "ryu",
- "serde",
- "unsafe-libyaml",
 ]
 
 [[package]]
@@ -2137,7 +2130,7 @@ dependencies = [
 
 [[package]]
 name = "solex"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "clap",
  "clap_complete",
@@ -2153,7 +2146,7 @@ dependencies = [
 
 [[package]]
 name = "solex-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "bs58",
  "ed25519-dalek",
@@ -2173,7 +2166,7 @@ dependencies = [
 
 [[package]]
 name = "solex-lang"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anchor-lang",
  "pinocchio",
@@ -2188,7 +2181,7 @@ dependencies = [
 
 [[package]]
 name = "solex-macros"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "bs58",
  "proc-macro2",
@@ -2199,7 +2192,7 @@ dependencies = [
 
 [[package]]
 name = "solex-mcp"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "rmcp",
  "serde",
@@ -2211,17 +2204,17 @@ dependencies = [
 
 [[package]]
 name = "solex-types"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "indexmap",
  "proc-macro2",
  "quote",
  "serde",
- "serde_yaml",
  "syn 2.0.119",
  "tempfile",
  "thiserror 2.0.21",
  "toml",
+ "yaml_serde",
 ]
 
 [[package]]
@@ -2535,12 +2528,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81e544489bf3d8ef66c953931f56617f423cd4b5494be343d9b9d3dda037b9a3"
 
 [[package]]
-name = "unsafe-libyaml"
-version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
-
-[[package]]
 name = "utf8parse"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2758,6 +2745,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "yaml_serde"
+version = "0.10.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33b729a08a9a6be689bbad3e2bf8015926db54b6622cc89c3a5f7dc174b9e918"
+dependencies = [
+ "indexmap",
+ "itoa",
+ "libyaml-rs",
+ "ryu",
+ "serde",
 ]
 
 [[package]]

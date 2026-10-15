@@ -182,11 +182,11 @@ pub fn parse(text: &str, path: &Path, format: Format) -> Result<(Manifest, Sourc
         }
         #[cfg(feature = "yaml")]
         Format::Yaml => {
-            let host: HostDoc = serde_yaml::from_str(text).map_err(|e| parse_err(&e))?;
+            let host: HostDoc = yaml_serde::from_str(text).map_err(|e| parse_err(&e))?;
             match host.solex {
                 Some(m) => (m, Source::Embedded),
                 None => (
-                    serde_yaml::from_str::<Manifest>(text).map_err(|e| parse_err(&e))?,
+                    yaml_serde::from_str::<Manifest>(text).map_err(|e| parse_err(&e))?,
                     Source::Standalone,
                 ),
             }
@@ -218,7 +218,7 @@ pub fn to_string(manifest: &Manifest, format: Format) -> Result<String> {
         #[cfg(feature = "toml")]
         Format::Toml => toml::to_string_pretty(manifest).map_err(|e| err(&e)),
         #[cfg(feature = "yaml")]
-        Format::Yaml => serde_yaml::to_string(manifest).map_err(|e| err(&e)),
+        Format::Yaml => yaml_serde::to_string(manifest).map_err(|e| err(&e)),
         #[allow(unreachable_patterns)]
         other => Err(Error::FormatDisabled {
             feature: match other {

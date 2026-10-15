@@ -14,7 +14,7 @@ A feature is a Cargo feature of the program whose enablement solex decides per c
 
 Agents produce code faster than anyone can review a big release. Solex keeps every upgrade small enough to test, review and audit as one diff, and the stable artifact carries nothing dormant.
 
-> **Status:** 0.2.0 on crates.io. Anchor 1.0 and Pinocchio programs build end to end with `cargo build-sbf`; see [solana-foundation/payment-channels#96](https://github.com/solana-foundation/payment-channels/pull/96) for a real program on two channels. Expect the API to move before 1.0.
+> **Status:** 0.2.1 on crates.io. Anchor 1.0 and Pinocchio programs build end to end with `cargo build-sbf`; see [solana-foundation/payment-channels#96](https://github.com/solana-foundation/payment-channels/pull/96) for a real program on two channels. Expect the API to move before 1.0.
 
 ## 💡 Key Features
 
