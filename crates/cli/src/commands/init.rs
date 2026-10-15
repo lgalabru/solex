@@ -4,7 +4,10 @@ use clap::{Args, ValueEnum};
 use solex_core::{CoreError, Result, scaffold, types::Format};
 use solex_types;
 
-use crate::{components, components::boxed, style};
+use crate::{
+    components,
+    components::{ChannelCard, boxed},
+};
 
 #[derive(Args, Debug)]
 pub struct InitCommand {
@@ -85,17 +88,10 @@ impl InitCommand {
                     .channel(ch)
                     .map(|c| c.cluster.0.join(", "))
                     .unwrap_or_default();
-                boxed::section(
-                    &[
-                        boxed::styled(style::bold(&components::channel(ch)), ch),
-                        boxed::plain(cluster),
-                    ],
-                    boxed::plain(""),
-                    &[
-                        ("program", boxed::plain(id.clone())),
-                        ("keypair", boxed::plain(format!("keys/{ch}.json"))),
-                    ],
-                )
+                ChannelCard::new(ch, Some(&cluster))
+                    .program(id)
+                    .text("keypair", format!("keys/{ch}.json"))
+                    .section()
             })
             .collect();
         components::print_notice(

@@ -8,7 +8,7 @@ use solex_core::{
 
 use crate::{
     commands,
-    components::{self, NoticeLevel, boxed},
+    components::{self, ChannelCard, NoticeLevel},
     style,
 };
 
@@ -82,36 +82,22 @@ impl TerminateCommand {
         };
         println!(
             "{}",
-            boxed::frame(&[boxed::section(
-                &[
-                    boxed::styled(
-                        style::bold(&components::channel(&plan.channel)),
-                        &plan.channel
-                    ),
-                    boxed::plain(plan.cluster.clone().unwrap_or_default()),
-                ],
-                boxed::plain(""),
-                &[
-                    ("target", boxed::plain(target)),
-                    (
-                        "authority",
-                        boxed::plain(
-                            plan.authority
-                                .as_ref()
-                                .map(|p| p.display().to_string())
-                                .unwrap_or_default(),
-                        ),
-                    ),
-                    (
-                        "recipient",
-                        boxed::plain(
-                            plan.recipient
-                                .clone()
-                                .unwrap_or_else(|| "solana CLI default keypair".into()),
-                        ),
-                    ),
-                ],
-            )])
+            ChannelCard::new(&plan.channel, plan.cluster.as_deref())
+                .text("target", target)
+                .text(
+                    "authority",
+                    plan.authority
+                        .as_ref()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_default(),
+                )
+                .text(
+                    "recipient",
+                    plan.recipient
+                        .clone()
+                        .unwrap_or_else(|| "solana CLI default keypair".into()),
+                )
+                .frame()
         );
 
         if !self.yes {

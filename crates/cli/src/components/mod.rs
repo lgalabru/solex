@@ -4,11 +4,13 @@
 //! of formatting output by hand.
 
 pub mod boxed;
+pub mod card;
 pub mod label;
 pub mod link;
 pub mod notice;
 pub(crate) mod terminal;
 
+pub use card::ChannelCard;
 pub use label::{channel, rel, short};
 pub use link::explorer_address_link;
 pub use notice::{NoticeLevel, print_notice};

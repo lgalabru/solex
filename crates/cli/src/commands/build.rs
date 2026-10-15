@@ -6,7 +6,11 @@ use solex_core::{
     build::{self, BuildOptions},
 };
 
-use crate::{commands, components, components::boxed, style};
+use crate::{
+    commands, components,
+    components::{ChannelCard, boxed},
+    style,
+};
 
 #[derive(Args, Debug, Default)]
 pub struct BuildCommand {
@@ -117,39 +121,19 @@ impl BuildCommand {
                 let out = result?;
                 let features = build::channel_features(&project, channel, &opts.features)?;
 
-                let mut head = vec![boxed::styled(
-                    style::bold(&components::channel(channel)),
-                    channel,
-                )];
-                if let Some(c) = out.cluster.as_deref() {
-                    head.push(boxed::plain(c));
-                }
                 let size = format!(
                     "{}  {}",
                     style::human_size(out.size),
                     style::human_duration(out.elapsed)
                 );
-                let right = boxed::styled(style::dim(&size), &size);
-                let features_line = features
-                    .iter()
-                    .map(|f| style::channel_color(channel, f))
-                    .collect::<Vec<_>>()
-                    .join("  ");
-                sections.push(boxed::section(
-                    &head,
-                    right,
-                    &[
-                        ("program", boxed::plain(components::short(&out.program_id))),
-                        (
-                            "features",
-                            boxed::styled(features_line, &features.join("  ")),
-                        ),
-                        (
-                            "artifact",
-                            boxed::plain(components::rel(project.root(), &out.so_path)),
-                        ),
-                    ],
-                ));
+                sections.push(
+                    ChannelCard::new(channel, out.cluster.as_deref())
+                        .right(&size)
+                        .program(&out.program_id)
+                        .features(&features)
+                        .artifact(project.root(), &out.so_path)
+                        .section(),
+                );
             }
         }
         if !sections.is_empty() {
