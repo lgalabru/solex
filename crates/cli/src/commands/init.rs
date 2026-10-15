@@ -13,11 +13,11 @@ pub struct InitCommand {
 
     /// Channels to create, first one is the default. Each later channel
     /// includes the previous one.
-    #[arg(long, value_delimiter = ',', default_value = "stable,nightly")]
+    #[arg(long, value_delimiter = ',', default_value = "stable,canary")]
     pub channels: Vec<String>,
 
     /// Cluster for a channel, as `channel=cluster` (repeatable).
-    /// Example: --cluster stable=mainnet-beta --cluster nightly=devnet
+    /// Example: --cluster stable=mainnet-beta --cluster canary=devnet
     #[arg(long = "cluster", value_name = "CHANNEL=CLUSTER")]
     pub clusters: Vec<String>,
 

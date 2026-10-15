@@ -18,7 +18,7 @@
 //!     #[channel(stable)]
 //!     pub fn increment(ctx: Context<Increment>) -> Result<()> { ... }
 //!
-//!     #[channel([nightly, 850])]
+//!     #[channel([canary, 850])]
 //!     pub fn decrement(ctx: Context<Decrement>) -> Result<()> { ... }
 //! }
 //! ```

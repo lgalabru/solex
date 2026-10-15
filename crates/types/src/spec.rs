@@ -29,7 +29,7 @@ pub struct FeatureSpec {
 
 impl FeatureSpec {
     /// The channel part of the attribute, as written: `devnet` or
-    /// `stable, [nightly, 850]`.
+    /// `stable, [canary, 850]`.
     pub fn tags_text(&self) -> String {
         self.entries
             .iter()
@@ -51,7 +51,7 @@ impl Parse for Entry {
             content.parse::<Token![,]>().map_err(|_| {
                 syn::Error::new(
                     bracket.span.join(),
-                    "expected `[tag, epoch]`, e.g. `[nightly, 850]`",
+                    "expected `[tag, epoch]`, e.g. `[canary, 850]`",
                 )
             })?;
             let epoch: LitInt = content.parse()?;
@@ -86,7 +86,7 @@ fn parse_tag(input: ParseStream) -> syn::Result<String> {
         ));
     }
     let ident: Ident = input.parse().map_err(|_| {
-        input.error("expected a channel tag such as `stable`, `nightly` or `[nightly, 850]`")
+        input.error("expected a channel tag such as `stable`, `canary` or `[canary, 850]`")
     })?;
     Ok(ident.to_string())
 }

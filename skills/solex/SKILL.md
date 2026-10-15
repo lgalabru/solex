@@ -1,8 +1,8 @@
 ---
 name: solex
 description: |
-  Release channels for Solana programs with solex: ship one codebase as stable / nightly / canary deployments, declare Cargo features per channel in Solex.toml and gate code with #[cfg(feature = ...)], epoch-gate activation, keep per-deployment constants in the manifest, and build/deploy per channel.
-  TRIGGERS: "feature gate this instruction", "ship to nightly first", "release channel", "what ships on mainnet", "solex", "Solex.toml", "Solex.yaml", "#[channel]", "[features.", "promote to stable", "devnet-only instruction", "epoch activation", "deploy per cluster", "channel-gated build"
+  Release channels for Solana programs with solex: ship one codebase as stable / canary / canary deployments, declare Cargo features per channel in Solex.toml and gate code with #[cfg(feature = ...)], epoch-gate activation, keep per-deployment constants in the manifest, and build/deploy per channel.
+  TRIGGERS: "feature gate this instruction", "ship to canary first", "release channel", "what ships on mainnet", "solex", "Solex.toml", "Solex.yaml", "#[channel]", "[features.", "promote to stable", "devnet-only instruction", "epoch activation", "deploy per cluster", "channel-gated build"
   Use when adding, gating, promoting or auditing program features across deployments, or when a program has cfg/feature flags that select clusters or program ids.
 ---
 
@@ -17,7 +17,7 @@ channels that ship it. Code gates on it with plain `#[cfg(feature = "...")]`.
 contains one channel's features and nothing dormant.
 
 Why it matters: agents produce more code than a big release can absorb. Small
-increments that reach nightly first, then stable, are testable and auditable
+increments that reach canary first, then stable, are testable and auditable
 as one diff each. The stable artifact stays small.
 
 # Core workflow
@@ -46,7 +46,7 @@ as one diff each. The stable artifact stays small.
 # Rules
 
 - One feature, one declaration. Never repeat "where" in the source; the
-  manifest owns it. Prefer a feature over `#[channel(nightly)]` tags unless
+  manifest owns it. Prefer a feature over `#[channel(canary)]` tags unless
   code is genuinely tied to a release train.
 - Gate the public surface, not shared checks. Validation and version checks
   used by stable paths stay unconditional.

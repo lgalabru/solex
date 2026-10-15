@@ -10,7 +10,7 @@
 
 Solex (SOlana EXpress) ships one Solana program to several release channels. A channel is a deployment: its own program id, cluster and upgrade authority, declared once in `Solex.toml`.
 
-A feature is a Cargo feature of the program whose enablement solex decides per channel. Declare it once in the manifest with the channels that ship it, gate code with plain `#[cfg(feature = "...")]`, and `solex build --nightly` compiles exactly what nightly ships. Promoting a feature to stable is a one-line manifest edit; the source does not change.
+A feature is a Cargo feature of the program whose enablement solex decides per channel. Declare it once in the manifest with the channels that ship it, gate code with plain `#[cfg(feature = "...")]`, and `solex build --canary` compiles exactly what canary ships. Promoting a feature to stable is a one-line manifest edit; the source does not change.
 
 Agents produce code faster than anyone can review a big release. Solex keeps every upgrade small enough to test, review and audit as one diff, and the stable artifact carries nothing dormant.
 
@@ -20,11 +20,11 @@ Agents produce code faster than anyone can review a big release. Solex keeps eve
 
 ### 📡 Channels in one manifest
 
-`stable`, `nightly`, `canary`, or whatever your team calls them. Each channel lists its program id, cluster(s), keypair and the channels it includes. Write it as `Solex.toml`, `Solex.yaml`, or a `[solex]` section inside `Anchor.toml` or `Quasar.toml`.
+`stable`, `canary`, `canary`, or whatever your team calls them. Each channel lists its program id, cluster(s), keypair and the channels it includes. Write it as `Solex.toml`, `Solex.yaml`, or a `[solex]` section inside `Anchor.toml` or `Quasar.toml`.
 
 ### ✂️ Features are Cargo features, enabled per channel
 
-`[features.hooks] channels = ["nightly"]` in the manifest, `hooks = []` in `Cargo.toml`, `#[cfg(feature = "hooks")]` in the code. `solex build --stable` passes no `--features hooks`, so the stable binary has no dormant hooks: no discriminator, no IDL entry, no bytes.
+`[features.hooks] channels = ["canary"]` in the manifest, `hooks = []` in `Cargo.toml`, `#[cfg(feature = "hooks")]` in the code. `solex build --stable` passes no `--features hooks`, so the stable binary has no dormant hooks: no discriminator, no IDL entry, no bytes.
 
 ### ⏱️ Epoch gates
 
@@ -55,7 +55,7 @@ Requires the Solana CLI with `cargo build-sbf` for program builds. Programs depe
 Scaffold an Anchor program with two channels and a keypair for each:
 
 ```console
-solex init counter --cluster stable=mainnet-beta --cluster nightly=devnet
+solex init counter --cluster stable=mainnet-beta --cluster canary=devnet
 cd counter
 ```
 
@@ -67,7 +67,7 @@ $ solex channels
   │ stable  mainnet-beta                                               default │
   │ program   2mwK…UsqH                                                        │
   ├────────────────────────────────────────────────────────────────────────────┤
-  │ nightly  devnet                                                            │
+  │ canary  devnet                                                             │
   │ program   9rws…KGMs                                                        │
   │ includes  stable                                                           │
   │ features  reset (from epoch 1000)                                          │
@@ -75,24 +75,24 @@ $ solex channels
 
 $ solex features
   ┌────────────────────────────────────────────────────────────────────────────┐
-  │ #[channel(stable)]  stable  nightly                                2 gates │
+  │ #[channel(stable)]  stable  canary                                 2 gates │
   ├────────────────────────────────────────────────────────────────────────────┤
-  │ reset  nightly from epoch 1000                                      1 gate │
-  │ resets the counter; nightly-only until proven                              │
+  │ reset  canary from epoch 1000                                       1 gate │
+  │ resets the counter; canary-only until proven                               │
   └────────────────────────────────────────────────────────────────────────────┘
 ```
 
 Build and deploy a channel. Any declared channel name works as a flag:
 
 ```console
-$ solex build --nightly
+$ solex build --canary
   ┌────────────────────────────────────────────────────────────────────────────┐
-  │ nightly  devnet                                            98.9 KiB  761ms │
+  │ canary  devnet                                             98.9 KiB  761ms │
   │ program   9rws…KGMs                                                        │
   │ features  reset                                                            │
-  │ artifact  target/solex/nightly/counter.so                                  │
+  │ artifact  target/solex/canary/counter.so                                   │
   └────────────────────────────────────────────────────────────────────────────┘
-$ solex deploy --nightly
+$ solex deploy --canary
 ```
 
 | Command | Purpose |
@@ -130,7 +130,7 @@ program_id = "CHNLxYvV…"
 cluster = "mainnet-beta"
 vars = { treasury_owner = "Cs2zdf…" }
 
-[channels.nightly]
+[channels.canary]
 description = "stable plus the hooks feature"
 includes = ["stable"]
 program_id = "CHNLxBtX…"
@@ -139,7 +139,7 @@ vars = { treasury_owner = "4zTeC5…" }
 
 [features.hooks]
 description = "V2 lifecycle hooks"
-channels = ["nightly"]             # add "stable" here to promote
+channels = ["canary"]             # add "stable" here to promote
 epoch = { stable = 850 }           # once on stable, inactive until epoch 850
 ```
 
@@ -159,7 +159,7 @@ pub fn open_with_hooks(...) -> ProgramResult { ... }
 ```console
 $ solex features
   ┌────────────────────────────────────────────────────────────────────────────┐
-  │ hooks  nightly                                                    24 gates │
+  │ hooks  canary                                                     24 gates │
   │ V2 lifecycle hooks                                                         │
   └────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -172,9 +172,9 @@ For code tied to a release train rather than a feature, `#[channel(...)]` gates 
 
 | Attribute | Meaning |
 |---|---|
-| `#[channel(nightly)]` | compiled into channels that ship `nightly` |
-| `#[channel(stable, nightly)]` | compiled if the channel ships any listed tag |
-| `#[channel([nightly, 850])]` | compiled into `nightly`; inactive until epoch 850 |
+| `#[channel(canary)]` | compiled into channels that ship `canary` |
+| `#[channel(stable, canary)]` | compiled if the channel ships any listed tag |
+| `#[channel([canary, 850])]` | compiled into `canary`; inactive until epoch 850 |
 
 Attribute macros cannot sit on enum variants or `match` arms, so for those `#[solex::gated]` on the enclosing item resolves nested `#[channel]` markers; `#[solex::program]` does this for Anchor modules. Cargo features need none of this.
 
@@ -215,9 +215,9 @@ artifact = "target/bpfel-unknown-none/release/lib{lib}.so"   # copied to target/
 For a pipeline solex should not drive at all:
 
 ```sh
-eval "$(solex env --nightly)"            # SOLEX_CHANNEL, SOLEX_MANIFEST, SOLEX_FEATURES=hooks
+eval "$(solex env --canary)"            # SOLEX_CHANNEL, SOLEX_MANIFEST, SOLEX_FEATURES=hooks
 cargo +nightly build-bpf --features "$SOLEX_FEATURES"
-solex exec --nightly -- cargo test --features "$SOLEX_FEATURES"
+solex exec --canary -- cargo test --features "$SOLEX_FEATURES"
 ```
 
 Verified builds work the same way: the container running `solana-verify` must see the same variables and features.

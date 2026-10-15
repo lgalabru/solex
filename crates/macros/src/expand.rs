@@ -274,7 +274,7 @@ pub fn ships(input: TokenStream) -> TokenStream {
             Err(e) => {
                 return err(syn::Error::new(
                     e.span(),
-                    "solex::ships! expects one tag, e.g. ships!(nightly)",
+                    "solex::ships! expects one tag, e.g. ships!(canary)",
                 ));
             }
         },

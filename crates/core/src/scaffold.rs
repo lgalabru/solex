@@ -15,7 +15,7 @@ use crate::{CoreError, Result, keys::Keypair};
 pub struct InitOptions {
     pub name: String,
     /// Channels in order; the first is the default and later ones include
-    /// their predecessor (`nightly` includes `stable`, ...).
+    /// their predecessor (`canary` includes `stable`, ...).
     pub channels: Vec<String>,
     /// Cluster per channel; falls back to `localnet`.
     pub clusters: BTreeMap<String, String>,
@@ -108,7 +108,7 @@ pub fn init(parent: &Path, opts: &InitOptions) -> Result<Created> {
         features.insert(
             "reset".to_string(),
             Feature {
-                description: Some("resets the counter; nightly-only until proven".into()),
+                description: Some("resets the counter; canary-only until proven".into()),
                 channels: vec![second.clone()],
                 epoch: IndexMap::from([(second.clone(), 1000u64)]),
             },
@@ -244,7 +244,7 @@ fn build_rs(manifest_file: &str) -> String {
 }
 
 fn lib_rs(module: &str, first: &str, second: Option<&str>) -> String {
-    let nightly_block = match second {
+    let canary_block = match second {
         Some(ch) => format!(
             r#"
     /// A channel-managed feature: Solex.toml enables `reset` on `{ch}` (and
@@ -283,7 +283,7 @@ pub mod {module} {{
         ctx.accounts.counter.count += 1;
         Ok(())
     }}
-{nightly_block}}}
+{canary_block}}}
 
 #[account]
 #[derive(InitSpace)]
@@ -334,7 +334,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let opts = InitOptions {
             name: "demo-counter".into(),
-            channels: vec!["stable".into(), "nightly".into()],
+            channels: vec!["stable".into(), "canary".into()],
             clusters: BTreeMap::from([("stable".into(), "mainnet-beta".into())]),
             solex_version: "0.1".into(),
             format: Format::Toml,
@@ -345,9 +345,9 @@ mod tests {
         let build_rs = std::fs::read_to_string(created.root.join("build.rs")).unwrap();
         assert!(build_rs.contains("rerun-if-changed=Solex.toml"));
         assert_eq!(m.default_channel.as_deref(), Some("stable"));
-        assert_eq!(m.channels["nightly"].includes, ["stable"]);
+        assert_eq!(m.channels["canary"].includes, ["stable"]);
         assert_eq!(m.channels["stable"].cluster.single(), Some("mainnet-beta"));
-        assert_eq!(m.channels["nightly"].cluster.single(), Some("localnet"));
+        assert_eq!(m.channels["canary"].cluster.single(), Some("localnet"));
         // keypair on disk matches the manifest program id
         for (ch, id) in &created.program_ids {
             let kp = crate::keys::pubkey_of(&created.root.join("keys").join(format!("{ch}.json")))
@@ -359,7 +359,7 @@ mod tests {
         assert!(lib.contains("pub mod demo_counter"));
         assert!(lib.contains("#[cfg(feature = \"reset\")]"));
         assert!(lib.contains("#[solex::activation(\"reset\")]"));
-        assert_eq!(m.features_for("nightly").unwrap(), ["reset"]);
+        assert_eq!(m.features_for("canary").unwrap(), ["reset"]);
         assert!(m.features_for("stable").unwrap().is_empty());
         assert!(syn::parse_file(&lib).is_ok(), "generated lib.rs must parse");
     }

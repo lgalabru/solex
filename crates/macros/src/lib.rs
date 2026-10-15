@@ -11,9 +11,9 @@ mod expand;
 ///
 /// ```ignore
 /// #[channel(stable)]            // on `stable` and every channel including it
-/// #[channel(nightly)]           // on `nightly` (and channels including it)
-/// #[channel([nightly, 850])]    // on `nightly`, callable from epoch 850
-/// #[channel(stable, [nightly, 850])]
+/// #[channel(canary)]           // on `canary` (and channels including it)
+/// #[channel([canary, 850])]    // on `canary`, callable from epoch 850
+/// #[channel(stable, [canary, 850])]
 /// ```
 ///
 /// An item whose tags are not shipped by the active channel is removed from
@@ -59,7 +59,7 @@ pub fn active_channel(input: TokenStream) -> TokenStream {
 /// #[solex::gated]
 /// pub enum Instruction {
 ///     Open = 1,
-///     #[channel(nightly)]
+///     #[channel(canary)]
 ///     OpenWithHooks = 10,
 /// }
 /// ```
@@ -105,7 +105,7 @@ pub fn active_cluster(input: TokenStream) -> TokenStream {
 /// Expands to a `bool` literal: whether the active channel ships `tag`.
 ///
 /// ```ignore
-/// if solex::ships!(nightly) { ... }
+/// if solex::ships!(canary) { ... }
 /// ```
 #[proc_macro]
 pub fn ships(input: TokenStream) -> TokenStream {

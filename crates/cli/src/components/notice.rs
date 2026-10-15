@@ -1,7 +1,7 @@
 //! Railed notice: a colored bar, a bold title, a dimmed body.
 //!
 //! ```text
-//! │ Deployed nightly
+//! │ Deployed canary
 //! │ program  CHNL…sWkJ
 //! │ cluster  devnet
 //! ```

@@ -8,16 +8,16 @@ channels:
     program_id: 2mwKUED1kXW5nGmpTrLGbdMBe9miMkstQjUJm9vEUsqH
     keypair: keys/stable.json
     cluster: mainnet-beta
-  nightly:
+  canary:
     program_id: 9rwsA9m17bLqtT1GZcjGZiWfzm4yXsu1p6w7AiAPKGMs
-    keypair: keys/nightly.json
+    keypair: keys/canary.json
     cluster: devnet
     includes:
     - stable
 features:
   reset:
-    description: resets the counter; nightly-only until proven
+    description: resets the counter; canary-only until proven
     channels:
-    - nightly
+    - canary
     epoch:
-      nightly: 1000
+      canary: 1000

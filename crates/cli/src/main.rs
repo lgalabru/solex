@@ -12,7 +12,7 @@ mod style;
     version,
     about = "Every increment ships. Only the proven ones reach stable.",
     after_help = "Any command taking --channel also accepts the channel name as a flag: \
-                  `solex build --nightly`.",
+                  `solex build --canary`.",
     propagate_version = true
 )]
 struct Cli {
@@ -57,7 +57,7 @@ enum Command {
     Completions(commands::completions::CompletionsCommand),
 }
 
-/// `solex build --nightly` is `solex build --channel nightly`. Channel names
+/// `solex build --canary` is `solex build --channel canary`. Channel names
 /// live in the manifest, so this runs before clap and only rewrites a flag
 /// that matches a declared channel; anything after `--` is left alone.
 fn expand_channel_flags(args: Vec<String>) -> Vec<String> {

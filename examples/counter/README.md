@@ -4,7 +4,7 @@ A Solana program managed by [solex](https://github.com/lgalabru/solex).
 
 Channels:
 - `stable`
-- `nightly`
+- `canary`
 
 ```sh
 solex features            # what ships where

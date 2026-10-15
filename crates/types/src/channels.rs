@@ -143,9 +143,9 @@ pub struct Channel {
     /// Upgrade authority keypair passed to `solana program deploy`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub upgrade_authority: Option<PathBuf>,
-    /// Other channels whose tags this channel also ships. A `nightly` channel
+    /// Other channels whose tags this channel also ships. A `canary` channel
     /// that `includes: [stable]` compiles every `#[channel(stable)]` item in
-    /// addition to `#[channel(nightly)]` ones.
+    /// addition to `#[channel(canary)]` ones.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub includes: Vec<String>,
     /// Free-form description shown by `solex channels`.
@@ -199,7 +199,7 @@ pub struct Feature {
 /// program_id = "..."
 /// cluster = "mainnet-beta"
 ///
-/// [solex.channels.nightly]
+/// [solex.channels.canary]
 /// program_id = "..."
 /// cluster = "devnet"
 /// includes = ["stable"]

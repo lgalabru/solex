@@ -111,7 +111,7 @@ pub struct GatedItem {
     pub line: usize,
     pub kind: &'static str,
     pub name: String,
-    /// The gate as written: `devnet`, `[nightly, 850]` or `feature = "hooks"`.
+    /// The gate as written: `devnet`, `[canary, 850]` or `feature = "hooks"`.
     pub gate_text: String,
     /// The feature this item belongs to, when the gate is exactly one feature.
     pub feature: Option<String>,

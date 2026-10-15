@@ -50,7 +50,7 @@ install:
 # Type-check the Anchor example on the host for every channel
 example-check:
     cd examples/counter && SOLEX_CHANNEL=stable cargo check
-    cd examples/counter && SOLEX_CHANNEL=nightly cargo check
+    cd examples/counter && SOLEX_CHANNEL=canary cargo check
 
 # Build the example program for every channel (requires cargo build-sbf)
 example-build:

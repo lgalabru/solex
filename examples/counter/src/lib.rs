@@ -21,7 +21,7 @@ pub mod counter {
         Ok(())
     }
 
-    /// A channel-managed feature: Solex.toml enables `reset` on `nightly` (and
+    /// A channel-managed feature: Solex.toml enables `reset` on `canary` (and
     /// channels including it) and gives it an activation epoch there, so this
     /// handler is absent from other channels and inactive until epoch 1000.
     #[cfg(feature = "reset")]

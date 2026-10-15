@@ -1,9 +1,9 @@
 # Promotion and rollback
 
-## Promote nightly → stable
+## Promote canary → stable
 
 1. Evidence: devnet transactions exercising the feature, client parity tests,
-   `solex features --json --channel nightly` showing it enabled.
+   `solex features --json --channel canary` showing it enabled.
 2. Edit the manifest: add the target channel to `[features.<name>] channels`
    (or move the feature to a channel the target includes). No source change.
 3. `solex features --check`, then build every channel: `solex build --all`.

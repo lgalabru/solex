@@ -6,7 +6,7 @@ use solex_core::{CoreError, Result, build};
 use crate::commands;
 
 /// Run any command with the channel selected, from the program directory:
-/// `solex exec -c nightly -- cargo +nightly build-bpf`.
+/// `solex exec -c canary -- cargo +nightly build-bpf`.
 #[derive(Args, Debug, Default)]
 pub struct ExecCommand {
     /// Channel (default: SOLEX_CHANNEL or the manifest default)

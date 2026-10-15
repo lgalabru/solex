@@ -6,7 +6,7 @@ use solex_core::{Result, build};
 use crate::commands;
 
 /// Print the environment a build needs so another pipeline can select the
-/// channel: `eval "$(solex env -c nightly)"` then `cargo +nightly build-bpf`.
+/// channel: `eval "$(solex env -c canary)"` then `cargo +nightly build-bpf`.
 #[derive(Args, Debug, Default)]
 pub struct EnvCommand {
     /// Channel (default: SOLEX_CHANNEL or the manifest default)
