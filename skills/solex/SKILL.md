@@ -160,9 +160,9 @@ Steps:
   `target/solex/<channel>/`; prints the features enabled. `--all` builds
   every channel. Every command taking `--channel c` also accepts `--c`.
 - `solex deploy --channel c [--cluster x] [--build] [--dry-run] [-y] [-- <args>]`:
-  uses the channel's id, cluster and authority. In a terminal it asks which
-  of the channel's clusters to deploy to (`--cluster` preselects one, `-y`
-  skips the prompt for CI); `-- <args>` reach `solana program deploy`.
+  uses the channel's id, cluster and authority. In a terminal it shows the
+  channel's clusters as a checklist to deploy to (`--cluster` limits it to
+  one, `-y` skips the prompt for CI); `-- <args>` reach `solana program deploy`.
   Always show the user the dry run first. If the CLI rejects the artifact's
   `sbpf_version`, the local Solana CLI is older than the `--arch` the
   manifest builds for: upgrade it, or pass `-- --skip-feature-verify` when

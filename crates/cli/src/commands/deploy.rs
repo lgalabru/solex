@@ -1,7 +1,7 @@
 use std::{io::IsTerminal, path::PathBuf};
 
 use clap::Args;
-use dialoguer::{Confirm, MultiSelect, theme::ColorfulTheme};
+use dialoguer::{MultiSelect, theme::ColorfulTheme};
 use solex_core::{
     CoreError, Result, build,
     deploy::{self, DeployOptions},
@@ -54,33 +54,24 @@ pub struct DeployCommand {
     pub deploy_args: Vec<String>,
 }
 
-/// Ask which of the channel's clusters to deploy to. One cluster is a yes/no
-/// question; several are a multi-select with everything checked. Escape or
-/// Ctrl-C answers "none".
+/// Ask which of the channel's clusters to deploy to: a multi-select with
+/// every cluster checked, also for a single one so the gesture is always the
+/// same. Escape or Ctrl-C answers "none".
 fn pick_targets(plans: Vec<deploy::DeployPlan>) -> Result<Vec<deploy::DeployPlan>> {
-    let theme = ColorfulTheme::default();
-    let describe = |p: &deploy::DeployPlan| {
-        format!(
-            "{}  {}",
-            p.cluster.as_deref().unwrap_or("solana CLI default cluster"),
-            components::short(&p.program_id)
-        )
-    };
-    if plans.len() == 1 {
-        let plan = &plans[0];
-        let go = Confirm::with_theme(&theme)
-            .with_prompt(format!("Deploy {} to {}?", plan.channel, describe(plan)))
-            .default(true)
-            .interact_opt()
-            .map_err(|e| CoreError::message(format!("prompt failed: {e}")))?
-            .unwrap_or(false);
-        return Ok(if go { plans } else { Vec::new() });
-    }
-    let items: Vec<String> = plans.iter().map(describe).collect();
+    let items: Vec<String> = plans
+        .iter()
+        .map(|p| {
+            format!(
+                "{}  {}",
+                p.cluster.as_deref().unwrap_or("solana CLI default cluster"),
+                components::short(&p.program_id)
+            )
+        })
+        .collect();
     let defaults = vec![true; items.len()];
-    let picked = MultiSelect::with_theme(&theme)
+    let picked = MultiSelect::with_theme(&ColorfulTheme::default())
         .with_prompt(format!(
-            "Deploy {} to which clusters? (space toggles, enter confirms)",
+            "Deploy {} to (space toggles, enter confirms)",
             plans[0].channel
         ))
         .items(&items)
