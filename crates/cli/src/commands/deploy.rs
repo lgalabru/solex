@@ -1,8 +1,9 @@
-use std::path::PathBuf;
+use std::{io::IsTerminal, path::PathBuf};
 
 use clap::Args;
+use dialoguer::{Confirm, MultiSelect, theme::ColorfulTheme};
 use solex_core::{
-    Result, build,
+    CoreError, Result, build,
     deploy::{self, DeployOptions},
 };
 
@@ -35,6 +36,10 @@ pub struct DeployCommand {
     #[arg(long)]
     pub dry_run: bool,
 
+    /// Deploy without asking which cluster(s); for CI and scripts
+    #[arg(long, short = 'y')]
+    pub yes: bool,
+
     /// Stream Solana CLI output
     #[arg(long, short)]
     pub verbose: bool,
@@ -42,6 +47,53 @@ pub struct DeployCommand {
     /// Path to the manifest (Solex.toml, Solex.yaml, or a host manifest with a [solex] section)
     #[arg(long)]
     pub manifest: Option<PathBuf>,
+
+    /// Extra arguments forwarded to `solana program deploy` (after `--`),
+    /// e.g. `-- --skip-feature-verify` or `-- --with-compute-unit-price 1000`
+    #[arg(last = true)]
+    pub deploy_args: Vec<String>,
+}
+
+/// Ask which of the channel's clusters to deploy to. One cluster is a yes/no
+/// question; several are a multi-select with everything checked. Escape or
+/// Ctrl-C answers "none".
+fn pick_targets(plans: Vec<deploy::DeployPlan>) -> Result<Vec<deploy::DeployPlan>> {
+    let theme = ColorfulTheme::default();
+    let describe = |p: &deploy::DeployPlan| {
+        format!(
+            "{}  {}",
+            p.cluster.as_deref().unwrap_or("solana CLI default cluster"),
+            components::short(&p.program_id)
+        )
+    };
+    if plans.len() == 1 {
+        let plan = &plans[0];
+        let go = Confirm::with_theme(&theme)
+            .with_prompt(format!("Deploy {} to {}?", plan.channel, describe(plan)))
+            .default(true)
+            .interact_opt()
+            .map_err(|e| CoreError::message(format!("prompt failed: {e}")))?
+            .unwrap_or(false);
+        return Ok(if go { plans } else { Vec::new() });
+    }
+    let items: Vec<String> = plans.iter().map(describe).collect();
+    let defaults = vec![true; items.len()];
+    let picked = MultiSelect::with_theme(&theme)
+        .with_prompt(format!(
+            "Deploy {} to which clusters? (space toggles, enter confirms)",
+            plans[0].channel
+        ))
+        .items(&items)
+        .defaults(&defaults)
+        .interact_opt()
+        .map_err(|e| CoreError::message(format!("prompt failed: {e}")))?
+        .unwrap_or_default();
+    Ok(plans
+        .into_iter()
+        .enumerate()
+        .filter(|(i, _)| picked.contains(i))
+        .map(|(_, p)| p)
+        .collect())
 }
 
 impl DeployCommand {
@@ -65,9 +117,23 @@ impl DeployCommand {
             payer: self.keypair.clone(),
             upgrade_authority: self.upgrade_authority.clone(),
             verbose: self.verbose,
+            extra_args: self.deploy_args.clone(),
         };
 
-        for plan in deploy::plans(&project, &channel, &opts)? {
+        let mut plans = deploy::plans(&project, &channel, &opts)?;
+        if !self.dry_run && !self.yes && std::io::stdin().is_terminal() {
+            plans = pick_targets(plans)?;
+            if plans.is_empty() {
+                components::print_notice(
+                    components::NoticeLevel::Warning,
+                    "Nothing sent",
+                    "No cluster selected.",
+                );
+                return Ok(());
+            }
+        }
+
+        for plan in plans {
             let cluster = plan.cluster.as_deref();
             let target = cluster.unwrap_or("(solana CLI default)");
             if self.dry_run {

@@ -159,9 +159,14 @@ Steps:
 - `solex build --channel c [-- <cargo build-sbf args>]`: artifacts in
   `target/solex/<channel>/`; prints the features enabled. `--all` builds
   every channel. Every command taking `--channel c` also accepts `--c`.
-- `solex deploy --channel c [--cluster x] [--build] [--dry-run]`: uses the
-  channel's id, cluster and authority; all of its clusters unless `--cluster`
-  picks one. Always show the user the dry run first.
+- `solex deploy --channel c [--cluster x] [--build] [--dry-run] [-y] [-- <args>]`:
+  uses the channel's id, cluster and authority. In a terminal it asks which
+  of the channel's clusters to deploy to (`--cluster` preselects one, `-y`
+  skips the prompt for CI); `-- <args>` reach `solana program deploy`.
+  Always show the user the dry run first. If the CLI rejects the artifact's
+  `sbpf_version`, the local Solana CLI is older than the `--arch` the
+  manifest builds for: upgrade it, or pass `-- --skip-feature-verify` when
+  the cluster is known to run that version.
 - `solex terminate --channel c [--cluster x] [--buffers]`: prints the `solana program close`
   plan; only `--yes` sends it, and mainnet also needs `--allow-mainnet`.
   Terminating a program is permanent. Never pass `--yes` unless the user asked.

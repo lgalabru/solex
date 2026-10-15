@@ -111,7 +111,7 @@ $ solex deploy --canary
 | `solex channels` | deployments, program ids, clusters, includes, features, vars |
 | `solex features [name] [--items] [--json] [--check]` | one entry per feature; `name` lists that feature's markers with file:line |
 | `solex build [--<channel> \| --all] [--cluster c]` | `cargo build-sbf` with the channel's features into `target/solex/<channel>/` |
-| `solex deploy [--<channel>] [--build] [--dry-run]` | `solana program deploy` with the channel's id, cluster and authority |
+| `solex deploy [--<channel>] [--build] [--dry-run] [-y] [-- <args>]` | `solana program deploy` with the channel's id, cluster and authority; asks which cluster(s), `-y` skips; `-- <args>` go to the Solana CLI |
 | `solex terminate [--<channel>] [--buffers] --yes` | `solana program close`; reclaims rent; mainnet needs `--allow-mainnet` |
 | `solex test [--<channel>] [-- args]` | `cargo test` with the channel selected and its features enabled |
 | `solex env [--format shell\|dotenv\|json]` | `SOLEX_CHANNEL`, `SOLEX_MANIFEST`, `SOLEX_CLUSTER`, `SOLEX_FEATURES` for other pipelines |
