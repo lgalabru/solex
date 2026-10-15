@@ -55,9 +55,11 @@ fn has(bin: &str) -> bool {
 }
 
 /// `npx skills add` is the installer the skills.sh ecosystem uses; it places
-/// the skill where each detected agent (Claude Code, Cursor, Codex, ...) reads it.
+/// the skill where each detected agent (Claude Code, Cursor, Codex, ...) reads
+/// it. `-g` installs user-level: `solex setup` is run from inside a program
+/// repo and must not drop `.agents/` and `.claude/` directories into it.
 fn install_skill() -> Result<()> {
-    let manual = format!("npx -y skills add {SKILL_REPO} --skill {SKILL_NAME} -y");
+    let manual = format!("npx -y skills add {SKILL_REPO} --skill {SKILL_NAME} -g -y");
     if !has(npx()) {
         return Err(CoreError::message(format!(
             "npx not found; install Node.js, then run:\n  {manual}"
@@ -66,7 +68,7 @@ fn install_skill() -> Result<()> {
     let sp = style::spinner("Installing the solex agent skill...");
     let status = Command::new(npx())
         .args([
-            "-y", "skills", "add", SKILL_REPO, "--skill", SKILL_NAME, "-y",
+            "-y", "skills", "add", SKILL_REPO, "--skill", SKILL_NAME, "-g", "-y",
         ])
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -74,9 +76,11 @@ fn install_skill() -> Result<()> {
     sp.finish_and_clear();
     match status {
         Ok(out) if out.status.success() => {
-            println!(
-                "{}",
-                components::ok("Skill installed for your coding agents")
+            components::print_notice(
+                components::NoticeLevel::Success,
+                "Skill installed",
+                "User-level, for every project; your coding agents (Claude Code, Cursor, Codex, ...)\n\
+                 now know solex. Re-run `solex setup` after upgrading to refresh it.",
             );
             Ok(())
         }
@@ -114,16 +118,23 @@ fn register_mcp() -> Result<()> {
         .output();
     match status {
         Ok(out) if out.status.success() => {
-            println!(
-                "{}",
-                components::ok("MCP server registered with Claude Code")
+            components::print_notice(
+                components::NoticeLevel::Success,
+                "MCP server registered with Claude Code",
+                &format!(
+                    "{solex_bin} mcp (user scope)\nclaude mcp list shows it; tools: channels, features, build, deploy_plan"
+                ),
             );
             Ok(())
         }
         Ok(out) => {
             let msg = String::from_utf8_lossy(&out.stderr);
             if msg.contains("already exists") {
-                println!("{}", components::ok("MCP server already registered"));
+                components::print_notice(
+                    components::NoticeLevel::Success,
+                    "MCP server already registered",
+                    "claude mcp remove solex, then solex setup --mcp, to re-register.",
+                );
                 Ok(())
             } else {
                 Err(CoreError::message(format!(

@@ -98,13 +98,14 @@ impl InitCommand {
                 )
             })
             .collect();
-        println!(
-            "{}",
-            components::ok(&format!(
-                "Created {} {}",
-                style::bold(&self.name),
-                style::dim(&created.root.display().to_string())
-            ))
+        components::print_notice(
+            components::NoticeLevel::Success,
+            &format!("Created {}", self.name),
+            &format!(
+                "{}\n{} files, one keypair per channel",
+                created.root.display(),
+                created.files.len()
+            ),
         );
         println!("{}", boxed::frame(&sections));
         let first = &self.channels[0];

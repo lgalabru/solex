@@ -3,7 +3,7 @@ use std::{path::PathBuf, process::Command};
 use clap::Args;
 use solex_core::{Result, build};
 
-use crate::{commands, style};
+use crate::{commands, components, style};
 
 #[derive(Args, Debug, Default)]
 pub struct TestCommand {
@@ -50,6 +50,15 @@ impl TestCommand {
                 .envs(build::target_env(&project, channel, cluster.as_deref()))
                 .current_dir(project.root());
             build::run(&mut cmd, "cargo test", true)?;
+            components::print_notice(
+                components::NoticeLevel::Success,
+                &format!("Tests passed on {channel}"),
+                &if features.is_empty() {
+                    "no channel features".to_string()
+                } else {
+                    format!("features  {}", features.join(", "))
+                },
+            );
         }
         Ok(())
     }

@@ -141,6 +141,17 @@ impl FeaturesCommand {
                 );
                 return Err(CoreError::Reported { code: 1 });
             }
+            components::print_notice(
+                components::NoticeLevel::Success,
+                "Channel gating checks passed",
+                &format!(
+                    "{} gate(s), {} feature(s), {} channel(s); every tag is a channel, every feature is\n\
+                     declared in Cargo.toml and used, build.rs watches SOLEX_*",
+                    matrix.rows.len(),
+                    m.features.len(),
+                    channels.len()
+                ),
+            );
         }
         Ok(())
     }
@@ -194,7 +205,12 @@ fn print_features(config: &Channels, matrix: &scan::Matrix, channels: &[String])
         }
     }
     if groups.is_empty() {
-        println!("  {}", style::dim("no gated items"));
+        components::print_notice(
+            components::NoticeLevel::Info,
+            "No gated items",
+            "Declare a feature under [features.<name>] in the manifest and gate code with\n\
+             #[cfg(feature = \"<name>\")]; #[channel(<tag>)] marks channel-specific items.",
+        );
         return;
     }
     let sections: Vec<Vec<boxed::Line>> = groups

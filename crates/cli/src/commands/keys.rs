@@ -111,15 +111,14 @@ fn new(args: &NewArgs) -> Result<()> {
     ch.keypair = Some(rel);
     project.save()?;
 
-    println!(
-        "{}",
-        components::ok(&format!(
-            "{} → {}",
-            components::channel(&args.channel),
-            style::bold(&id)
-        ))
+    components::print_notice(
+        components::NoticeLevel::Success,
+        &format!("New keypair for {}", args.channel),
+        &format!(
+            "program  {id}\nkeypair  {}\nmanifest updated; keep the keypair out of git",
+            components::rel(project.root(), &path)
+        ),
     );
-    println!("{}", components::tip(&path.display().to_string()));
     Ok(())
 }
 
