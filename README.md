@@ -127,7 +127,7 @@ $ solex deploy --canary
 | `solex test [--<channel>] [-- args]` | `cargo test` with the channel selected and its features enabled |
 | `solex env [--format shell\|dotenv\|json]` | `SOLEX_CHANNEL`, `SOLEX_MANIFEST`, `SOLEX_CLUSTER`, `SOLEX_FEATURES` for other pipelines |
 | `solex exec [--<channel>] -- <cmd>` | run any command with the channel selected |
-| `solex keys list \| new \| check` | per-channel program keypairs |
+| `solex keys list \| new [--cluster x] \| check` | per-channel program keypairs |
 | `solex setup` | install the agent skill and register the MCP server with Claude Code and Codex; `--no-skill`, `--no-mcp` |
 | `solex mcp` | MCP server: channels, features, builds, deploy plans |
 
