@@ -44,8 +44,18 @@ Treasury owners, admin keys and fee accounts live next to the program id as `var
 
 ## Installation
 
+**From crates.io**
+
 ```console
 cargo install solex
+```
+
+**From source**
+
+```console
+git clone https://github.com/lgalabru/solex
+cd solex
+just install        # cargo install --path crates/cli --force
 ```
 
 Requires the Solana CLI with `cargo build-sbf` for program builds. Programs depend on `solex-lang`; `solex setup` installs the agent skill and can register the MCP server with Claude Code.
