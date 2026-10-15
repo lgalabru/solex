@@ -123,7 +123,7 @@ fn register_mcp() -> Result<()> {
     let solex_bin = std::env::current_exe()
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_else(|_| "solex".into());
-    let tools = format!("tools  {}", solex_mcp::tool_names().join(", "));
+    let tools = format!("tools    {}", solex_mcp::tool_names().join(", "));
 
     let found: Vec<&Agent> = AGENTS.iter().filter(|a| has(a.bin)).collect();
     if found.is_empty() {
@@ -168,7 +168,7 @@ fn register_mcp() -> Result<()> {
     components::print_notice(
         components::NoticeLevel::Success,
         "MCP server registered",
-        &format!("{}\n{tools}", done.join(", ")),
+        &format!("harness  {}\n{tools}", done.join(", ")),
     );
     Ok(())
 }
