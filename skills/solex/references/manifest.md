@@ -52,8 +52,21 @@ or a list), `keypair` (first deploy only), `upgrade_authority`, `includes`,
 Per-cluster overrides, `[channels.<channel>.<cluster>]`, may set `program_id`,
 `keypair`, `upgrade_authority` and `vars` (merged over the channel's). The
 key must be one of the channel's clusters. With overrides, the channel builds
-once per cluster and `SOLEX_CLUSTER` reaches the macros; `solex::active_cluster!()`
-exposes it.
+once per cluster into `target/solex/<channel>/<cluster>/`, `SOLEX_CLUSTER`
+reaches the macros and `solex::active_cluster!()` exposes it; `build`,
+`test`, `env`, `exec`, `deploy` and `terminate` take `--cluster` to pick one.
+Without overrides a multi-cluster channel is a single artifact deployed to
+each cluster.
+
+```toml
+[channels.stable]
+program_id = "CHNLxYvVA28MJP9PrFuDXccuoGXAx7jBacfLEkahyGsX"
+cluster = ["mainnet-beta", "testnet"]
+vars = { treasury_owner = "Cs2zdfUNonRdRGsiZUQQLdTxzxVvJZmgiX2mpLYKuEqP" }
+
+[channels.stable.testnet]
+vars = { treasury_owner = "4zTeC5mVqWLruDexgU2mV66p9t5vCA9JyiZqdGDUspap" }
+```
 
 ## Embedded in a host manifest
 

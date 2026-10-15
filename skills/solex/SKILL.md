@@ -2,8 +2,8 @@
 name: solex
 description: |
   Release channels for Solana programs with solex: ship one codebase as stable / canary deployments, declare Cargo features per channel in Solex.toml and gate code with #[cfg(feature = ...)], epoch-gate activation, keep per-deployment constants in the manifest, and build/deploy per channel.
-  TRIGGERS: "feature gate this instruction", "ship to canary first", "release channel", "what ships on mainnet", "solex", "Solex.toml", "Solex.yaml", "#[channel]", "[features.", "promote to stable", "devnet-only instruction", "epoch activation", "deploy per cluster", "channel-gated build"
-  Use when adding a feature to a channel, gating, promoting or auditing program features across deployments, or when a program has cfg/feature flags that select clusters or program ids.
+  TRIGGERS: "feature gate this instruction", "ship to canary first", "release channel", "what ships on mainnet", "solex", "Solex.toml", "Solex.yaml", "#[channel]", "[features.", "promote to stable", "devnet-only instruction", "epoch activation", "deploy per cluster", "deploy to another network", "also deploy on testnet", "channel-gated build"
+  Use when adding a feature to a channel, deploying a channel to another cluster, gating, promoting or auditing program features across deployments, or when a program has cfg/feature flags that select clusters or program ids.
 ---
 
 # solex: release channels for Solana programs
@@ -71,6 +71,52 @@ production channel.
 Never gate with `#[channel(canary)]` to "add a feature": that repeats the
 "where" on every marker and is exactly what the manifest exists to avoid.
 
+# Deploying a channel to another network
+
+First decide whether the user wants the *same code* on another cluster or a
+*new release stage*. A new stage (different features) is a new channel that
+`includes` the existing one. The same code on another cluster is one channel
+with several clusters:
+
+```toml
+[channels.stable]
+program_id = "CHNL..."                 # same address on every cluster
+cluster = ["mainnet-beta", "testnet"]  # was: cluster = "mainnet-beta"
+vars = { treasury_owner = "Cs2z..." }
+
+[channels.stable.testnet]              # only if something differs there
+vars = { treasury_owner = "4zTe..." }
+# program_id, keypair and upgrade_authority can be overridden the same way
+```
+
+Steps:
+
+1. Turn `cluster` into a list (monikers or RPC URLs). The program id is an
+   address, so the same keypair deploys to every cluster unless the user wants
+   a distinct id there; add `[channels.<channel>.<cluster>]` with `program_id`
+   and `keypair` in that case.
+2. Check every `vars` entry: a treasury, admin or mint that exists on mainnet
+   does not exist on testnet. Override the ones that differ under
+   `[channels.<channel>.<cluster>]`. Overrides may only name a cluster the
+   channel lists; a typo is an error.
+3. Without overrides the channel is one artifact and `solex build --channel c`
+   is unchanged. With overrides it builds once per cluster into
+   `target/solex/<channel>/<cluster>/`, `SOLEX_CLUSTER` reaches the macros and
+   `solex::active_cluster!()` exposes it. `build`, `test`, `env` and `exec`
+   then take `--cluster <name>`; without it, `build` does every cluster and
+   the others fail on ambiguity.
+4. Make sure the program's `build.rs` lists
+   `cargo:rerun-if-env-changed=SOLEX_CLUSTER` next to `SOLEX_CHANNEL` and
+   `SOLEX_MANIFEST`; otherwise cargo reuses the previous cluster's compilation
+   and the artifact carries the wrong constants. `solex features --check`
+   flags a missing one.
+5. `solex channels` shows the resolved values per cluster. Then
+   `solex deploy --channel c --cluster testnet --dry-run`, review, deploy.
+   Without `--cluster`, `deploy` goes to every cluster of the channel in
+   order; `terminate` requires `--cluster` when there are several.
+6. A `[solex]` section inside `Anchor.toml` works the same; the `[provider]`
+   cluster there is not consulted.
+
 # Rules
 
 - One feature, one declaration. Never repeat "where" in the source; the
@@ -85,9 +131,9 @@ Never gate with `#[channel(canary)]` to "add a feature": that repeats the
 - Per-deployment constants (treasury, admin, fee accounts) go under `vars` on
   each channel and are read with `solex::var!("name")`. A channel missing the
   var fails to compile; never keep a placeholder constant in code.
-- `cluster = ["mainnet-beta", "devnet"]` deploys one channel to several
-  clusters; `[channels.<channel>.<cluster>]` overrides `program_id` or `vars`
-  for one of them, and the channel then builds once per cluster.
+- One channel, several clusters is for the same code on several networks;
+  a different feature set is a new channel. See "Deploying a channel to
+  another network".
 - Cargo features are additive: a workspace build that enables a feature for a
   client or test crate enables it in the program too. Build programs through
   `solex build` (it uses `--manifest-path`) or with `--features
@@ -113,9 +159,10 @@ Never gate with `#[channel(canary)]` to "add a feature": that repeats the
 - `solex build --channel c [-- <cargo build-sbf args>]`: artifacts in
   `target/solex/<channel>/`; prints the features enabled. `--all` builds
   every channel. Every command taking `--channel c` also accepts `--c`.
-- `solex deploy --channel c [--build] [--dry-run]`: uses the channel's id,
-  cluster and authority. Always show the user the dry run first.
-- `solex terminate --channel c [--buffers]`: prints the `solana program close`
+- `solex deploy --channel c [--cluster x] [--build] [--dry-run]`: uses the
+  channel's id, cluster and authority; all of its clusters unless `--cluster`
+  picks one. Always show the user the dry run first.
+- `solex terminate --channel c [--cluster x] [--buffers]`: prints the `solana program close`
   plan; only `--yes` sends it, and mainnet also needs `--allow-mainnet`.
   Terminating a program is permanent. Never pass `--yes` unless the user asked.
 - `solex env --channel c [--format dotenv|json]` and
