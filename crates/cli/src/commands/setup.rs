@@ -29,9 +29,9 @@ impl SetupCommand {
         }
         if self.mcp {
             register_mcp()?;
-        } else {
+        } else if !mcp_registered() {
             components::print_notice(
-                components::NoticeLevel::Info,
+                components::NoticeLevel::Warning,
                 "MCP server not registered",
                 "solex setup --mcp registers it with Claude Code, or add it yourself:\n\
                  claude mcp add --scope user solex -- solex mcp",
@@ -92,6 +92,17 @@ fn install_skill() -> Result<()> {
             "failed to run npx: {e}\n  Retry with:\n  {manual}"
         ))),
     }
+}
+
+/// Whether Claude Code already knows a `solex` MCP server. Without the
+/// `claude` CLI there is nothing to check, so the hint is shown.
+fn mcp_registered() -> bool {
+    Command::new("claude")
+        .args(["mcp", "get", "solex"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
 }
 
 fn register_mcp() -> Result<()> {
