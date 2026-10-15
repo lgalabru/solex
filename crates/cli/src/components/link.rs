@@ -35,16 +35,24 @@ pub fn explorer_address_url(address: &str, cluster: Option<&str>) -> String {
     }
 }
 
-/// `CHNL…sWkJ ↗` linking to the explorer; the full address is the link target.
-pub fn explorer_address_link(address: &str, cluster: Option<&str>) -> String {
+/// `<text> ↗` linking to the explorer page of `address` on `cluster`.
+pub fn explorer_link(text: &str, address: &str, cluster: Option<&str>) -> String {
     format!(
         "{} {}",
-        link(
-            &super::short(address),
-            &explorer_address_url(address, cluster)
-        ),
+        link(text, &explorer_address_url(address, cluster)),
         style::dim("↗")
     )
+}
+
+/// How to follow a terminal link on this platform, e.g.
+/// `⌘+click opens Solana Explorer`.
+pub fn click_hint(what: &str) -> String {
+    let modifier = if cfg!(target_os = "macos") {
+        "⌘"
+    } else {
+        "ctrl"
+    };
+    format!("{modifier}+click opens {what}")
 }
 
 #[cfg(test)]

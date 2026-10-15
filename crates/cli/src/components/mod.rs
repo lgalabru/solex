@@ -12,5 +12,5 @@ pub(crate) mod terminal;
 
 pub use card::ChannelCard;
 pub use label::{channel, rel, short};
-pub use link::explorer_address_link;
-pub use notice::{NoticeLevel, print_notice};
+pub use link::{click_hint, explorer_link};
+pub use notice::{NoticeLevel, print_notice, print_notice_lines};

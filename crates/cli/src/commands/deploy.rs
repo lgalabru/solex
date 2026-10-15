@@ -151,14 +151,13 @@ impl DeployCommand {
             let r = deploy::deploy(&plan, self.verbose);
             sp.finish_and_clear();
             let id = r?;
-            components::print_notice(
+            components::print_notice_lines(
                 components::NoticeLevel::Success,
                 &format!("Deployed {} to {target}", plan.channel),
-                &format!(
-                    "{}\n{}",
-                    components::explorer_address_link(&id, cluster),
-                    id
-                ),
+                &[
+                    components::explorer_link(&id, &id, cluster),
+                    components::click_hint("Solana Explorer"),
+                ],
             );
         }
         Ok(())
