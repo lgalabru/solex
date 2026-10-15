@@ -15,7 +15,7 @@ args = ["--tools-version", "v1.58", "--arch", "v3"]
 
 [channels.mainnet]
 program_id = "CHNLxYvVA28MJP9PrFuDXccuoGXAx7jBacfLEkahyGsX"
-cluster = "mainnet-beta"
+cluster = "mainnet"
 upgrade_authority = "~/.config/solana/mainnet-authority.json"
 vars = { treasury_owner = "Cs2zdfUNonRdRGsiZUQQLdTxzxVvJZmgiX2mpLYKuEqP" }
 
@@ -45,8 +45,9 @@ Every feature here must also exist in the program's `Cargo.toml` `[features]`
 channel's features; code gates on them with `#[cfg(feature = "hooks")]`.
 
 Fields per channel: `program_id` (required to build; a channel without one is
-tag-only and exists for others to `include`), `cluster` (moniker or RPC URL,
-or a list), `keypair` (first deploy only), `upgrade_authority`, `includes`,
+tag-only and exists for others to `include`), `cluster` (`mainnet`, `devnet`,
+`testnet`, `localnet` or an RPC URL, or a list; `mainnet-beta` is accepted
+too), `keypair` (first deploy only), `upgrade_authority`, `includes`,
 `vars`, `description`.
 
 Per-cluster overrides, `[channels.<channel>.<cluster>]`, may set `program_id`,
@@ -61,7 +62,7 @@ each cluster.
 ```toml
 [channels.stable]
 program_id = "CHNLxYvVA28MJP9PrFuDXccuoGXAx7jBacfLEkahyGsX"
-cluster = ["mainnet-beta", "testnet"]
+cluster = ["mainnet", "testnet"]
 vars = { treasury_owner = "Cs2zdfUNonRdRGsiZUQQLdTxzxVvJZmgiX2mpLYKuEqP" }
 
 [channels.stable.testnet]
@@ -79,7 +80,7 @@ program_path = "programs/counter"
 
 [solex.channels.stable]
 program_id = "..."
-cluster = "mainnet-beta"
+cluster = "mainnet"
 ```
 
 Discovery walks up from the crate being built: `Solex.toml`, `Solex.yaml`,

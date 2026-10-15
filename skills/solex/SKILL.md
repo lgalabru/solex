@@ -81,7 +81,7 @@ with several clusters:
 ```toml
 [channels.stable]
 program_id = "CHNL..."                 # same address on every cluster
-cluster = ["mainnet-beta", "testnet"]  # was: cluster = "mainnet-beta"
+cluster = ["mainnet", "testnet"]  # was: cluster = "mainnet"
 vars = { treasury_owner = "Cs2z..." }
 
 [channels.stable.testnet]              # only if something differs there

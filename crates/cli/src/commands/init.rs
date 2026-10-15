@@ -20,7 +20,7 @@ pub struct InitCommand {
     pub channels: Vec<String>,
 
     /// Cluster for a channel, as `channel=cluster` (repeatable).
-    /// Example: --cluster stable=mainnet-beta --cluster canary=devnet
+    /// Example: --cluster stable=mainnet --cluster canary=devnet
     #[arg(long = "cluster", value_name = "CHANNEL=CLUSTER")]
     pub clusters: Vec<String>,
 

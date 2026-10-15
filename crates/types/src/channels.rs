@@ -478,9 +478,30 @@ pub fn is_valid_channel_name(name: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
 }
 
+/// The `--url` value the Solana CLI understands for a manifest cluster name.
+/// Manifests may say `mainnet`, `devnet`, `testnet` or `localnet` (or the
+/// one-letter forms); anything else is passed through as an RPC URL.
+pub fn solana_url(cluster: &str) -> &str {
+    match cluster {
+        "mainnet" | "mainnet-beta" | "m" => "mainnet-beta",
+        "devnet" | "d" => "devnet",
+        "testnet" | "t" => "testnet",
+        "localnet" | "localhost" | "l" => "localhost",
+        other => other,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn monikers_map_to_solana_cli_urls() {
+        assert_eq!(solana_url("mainnet"), "mainnet-beta");
+        assert_eq!(solana_url("mainnet-beta"), "mainnet-beta");
+        assert_eq!(solana_url("localnet"), "localhost");
+        assert_eq!(solana_url("https://rpc.example"), "https://rpc.example");
+    }
 
     fn sample() -> Channels {
         let mut channels = IndexMap::new();

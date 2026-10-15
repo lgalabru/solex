@@ -40,7 +40,7 @@ impl TerminatePlan {
             cmd.arg(&self.program_id).arg("--bypass-warning");
         }
         if let Some(url) = &self.cluster {
-            cmd.args(["--url", url]);
+            cmd.args(["--url", solex_types::solana_url(url)]);
         }
         if let Some(auth) = &self.authority {
             cmd.arg("--authority").arg(auth);

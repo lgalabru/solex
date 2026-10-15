@@ -335,7 +335,7 @@ mod tests {
         let opts = InitOptions {
             name: "demo-counter".into(),
             channels: vec!["stable".into(), "canary".into()],
-            clusters: BTreeMap::from([("stable".into(), "mainnet-beta".into())]),
+            clusters: BTreeMap::from([("stable".into(), "mainnet".into())]),
             solex_version: "0.1".into(),
             format: Format::Toml,
         };
@@ -346,7 +346,7 @@ mod tests {
         assert!(build_rs.contains("rerun-if-changed=Solex.toml"));
         assert_eq!(m.default_channel.as_deref(), Some("stable"));
         assert_eq!(m.channels["canary"].includes, ["stable"]);
-        assert_eq!(m.channels["stable"].cluster.single(), Some("mainnet-beta"));
+        assert_eq!(m.channels["stable"].cluster.single(), Some("mainnet"));
         assert_eq!(m.channels["canary"].cluster.single(), Some("localnet"));
         // keypair on disk matches the manifest program id
         for (ch, id) in &created.program_ids {

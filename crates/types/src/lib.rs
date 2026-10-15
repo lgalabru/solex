@@ -24,6 +24,7 @@ pub mod spec;
 
 pub use channels::{
     Channel, Channels, ClusterOverride, Clusters, Feature, Resolved, is_valid_channel_name,
+    solana_url,
 };
 pub use manifest::{
     BuildConfig, CHANNEL_ENV, CLUSTER_ENV, FEATURES_ENV, Format, HOST_FILES, Loaded, MANIFEST_ENV,

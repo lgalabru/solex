@@ -65,7 +65,7 @@ Requires the Solana CLI with `cargo build-sbf` for program builds. Programs depe
 Scaffold an Anchor program with two channels and a keypair for each:
 
 ```console
-solex init counter --cluster stable=mainnet-beta --cluster canary=devnet
+solex init counter --cluster stable=mainnet --cluster canary=devnet
 cd counter
 ```
 
@@ -74,7 +74,7 @@ See the channels and what each one ships:
 ```console
 $ solex channels
   ┌────────────────────────────────────────────────────────────────────────────┐
-  │ stable  mainnet-beta                                               default │
+  │ stable  mainnet                                               default │
   │ program   2mwK…UsqH                                                        │
   ├────────────────────────────────────────────────────────────────────────────┤
   │ canary  devnet                                                             │
@@ -148,7 +148,7 @@ default_channel = "stable"
 [channels.stable]
 description = "V1 instruction set, the audited surface"
 program_id = "CHNLxYvV…"
-cluster = "mainnet-beta"
+cluster = "mainnet"
 vars = { treasury_owner = "Cs2zdf…" }
 
 [channels.canary]
@@ -206,7 +206,7 @@ Attribute macros cannot sit on enum variants or `match` arms, so for those `#[so
 ```toml
 [channels.stable]
 program_id = "CHNLxYvV…"
-cluster = ["mainnet-beta", "devnet"]
+cluster = ["mainnet", "devnet"]
 vars = { treasury_owner = "Cs2zdf…" }
 
 [channels.stable.devnet]               # inherits everything else
@@ -214,7 +214,7 @@ program_id = "CHNLxBtX…"
 vars = { treasury_owner = "4zTeC5…" }
 ```
 
-Because `var!` and `declare_id!` resolve at compile time, a channel with overrides is one artifact per cluster, `target/solex/stable/mainnet-beta/` and `target/solex/stable/devnet/`, each built with `SOLEX_CLUSTER` set; `solex deploy` sends each to its cluster and `--cluster` narrows any command to one. A build that cannot tell which cluster it is for fails rather than guessing. A channel without `program_id` is tag-only: it names a surface for other channels to `include` and is never built.
+Because `var!` and `declare_id!` resolve at compile time, a channel with overrides is one artifact per cluster, `target/solex/stable/mainnet/` and `target/solex/stable/devnet/`, each built with `SOLEX_CLUSTER` set; `solex deploy` sends each to its cluster and `--cluster` narrows any command to one. A build that cannot tell which cluster it is for fails rather than guessing. A channel without `program_id` is tag-only: it names a surface for other channels to `include` and is never built.
 
 ## Build pipelines
 

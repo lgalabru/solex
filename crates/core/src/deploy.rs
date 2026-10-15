@@ -49,7 +49,7 @@ impl DeployPlan {
             None => cmd.arg(&self.program_id),
         };
         if let Some(url) = &self.cluster {
-            cmd.args(["--url", url]);
+            cmd.args(["--url", solex_types::solana_url(url)]);
         }
         if let Some(auth) = &self.upgrade_authority {
             cmd.arg("--upgrade-authority").arg(auth);
