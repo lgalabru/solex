@@ -58,7 +58,7 @@ cd solex
 just install        # cargo install --path crates/cli --force
 ```
 
-Requires the Solana CLI with `cargo build-sbf` for program builds. Programs depend on `solex-lang`; `solex setup` installs the agent skill and can register the MCP server with Claude Code.
+Requires the Solana CLI with `cargo build-sbf` for program builds. Programs depend on `solex-lang`; `solex setup` installs the agent skill and registers the MCP server with Claude Code.
 
 ## Usage
 
