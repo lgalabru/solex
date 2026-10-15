@@ -8,35 +8,39 @@
 
 ## 🚆 Overview
 
-Solex (SOlana EXpress) ships one Solana program to several release channels. Each channel in `Solex.yaml` is its own deployment, with its own program id, cluster and upgrade authority.
+Solex (SOlana EXpress) ships one Solana program to several release channels. A channel is a deployment: its own program id, cluster and upgrade authority, declared once in `Solex.toml`.
 
-Tag a change with `#[channel(nightly)]` and it compiles into the nightly binary only. Promote it to `#[channel(stable)]` once devnet has run it. Code that is not tagged for a channel is absent from that channel's artifact, so what mainnet runs is exactly what you chose to ship.
+A feature is a Cargo feature of the program whose enablement solex decides per channel. Declare it once in the manifest with the channels that ship it, gate code with plain `#[cfg(feature = "...")]`, and `solex build --nightly` compiles exactly what nightly ships. Promoting a feature to stable is a one-line manifest edit; the source does not change.
 
-Agents produce code faster than anyone can review a big release. Solex keeps every upgrade small enough to test, review and audit as one diff.
+Agents produce code faster than anyone can review a big release. Solex keeps every upgrade small enough to test, review and audit as one diff, and the stable artifact carries nothing dormant.
 
-> **Status:** early. Anchor 1.0 and `cargo build-sbf` work end to end; expect the API to move.
+> **Status:** 0.2.0 on crates.io. Anchor 1.0 and Pinocchio programs build end to end with `cargo build-sbf`; see [solana-foundation/payment-channels#96](https://github.com/solana-foundation/payment-channels/pull/96) for a real program on two channels. Expect the API to move before 1.0.
 
 ## 💡 Key Features
 
-### 📡 Channels in one config section
+### 📡 Channels in one manifest
 
-`stable`, `nightly`, `canary`, or whatever your team calls them. Each channel lists its program id, cluster and keypair, and which other channels it includes. Write it as `Solex.toml`, `Solex.yaml`, or a `[solex]` section inside `Anchor.toml` or `Quasar.toml`.
+`stable`, `nightly`, `canary`, or whatever your team calls them. Each channel lists its program id, cluster(s), keypair and the channels it includes. Write it as `Solex.toml`, `Solex.yaml`, or a `[solex]` section inside `Anchor.toml` or `Quasar.toml`.
 
 ### ✂️ Features are Cargo features, enabled per channel
 
-Declare `[features.hooks]` once in the manifest with the channels that ship it; gate code with plain `#[cfg(feature = "hooks")]`. `solex build --channel mainnet` passes exactly the features mainnet enables, so the stable binary has no dormant hooks: no discriminator, no IDL entry, no bytes.
+`[features.hooks] channels = ["nightly"]` in the manifest, `hooks = []` in `Cargo.toml`, `#[cfg(feature = "hooks")]` in the code. `solex build --stable` passes no `--features hooks`, so the stable binary has no dormant hooks: no discriminator, no IDL entry, no bytes.
 
 ### ⏱️ Epoch gates
 
-`[features.hooks] epoch = { mainnet = 850 }` plus `#[solex::activation("hooks")]` on the handler: compiled in, but `FEATURE_NOT_ACTIVE` until the cluster reaches epoch 850, the way Solana's own feature gates activate.
+`[features.hooks] epoch = { stable = 850 }` plus `#[solex::activation("hooks")]` on the handler: compiled in, but `FEATURE_NOT_ACTIVE` until the cluster reaches epoch 850, the way Solana's own feature gates activate.
 
 ### 🔍 What ships where, before you build
 
-`solex features` reads the manifest and the sources and prints one entry per feature with the channels it ships on, each channel in its own color. Reviewers and auditors see the same table the compiler acts on, and `--check` fails on a feature that is declared but unused, unused but declared, or missing from `Cargo.toml`.
+`solex features` reads the manifest and the sources and prints one entry per feature with the channels it ships on. Reviewers and auditors see the same view the compiler acts on, and `--check` fails on a feature missing from `Cargo.toml`, declared but unused, or a build script that would let cargo reuse another channel's compilation.
 
-### 🚀 Build and deploy per channel
+### 🔑 Per-deployment constants
 
-`solex build --channel nightly` and `solex deploy --channel nightly` select the channel, the program id, the cluster and the authority from the manifest. Artifacts land in `target/solex/<channel>/`.
+Treasury owners, admin keys and fee accounts live next to the program id as `vars` on each channel and are read with `solex::var!("treasury_owner")`. A channel without the var does not compile, so a placeholder can never reach a real cluster.
+
+### 🚀 Build, deploy, terminate per channel
+
+`solex build`, `solex deploy` and `solex terminate` take the channel's program id, cluster, authority and features from the manifest. Other pipelines get the same selection through `solex env` and `solex exec`.
 
 ## Installation
 
@@ -44,7 +48,7 @@ Declare `[features.hooks]` once in the manifest with the channels that ship it; 
 cargo install solex
 ```
 
-Requires the Solana CLI with `cargo build-sbf` for program builds. To build from source, clone the repo and run `cargo install --path crates/cli`.
+Requires the Solana CLI with `cargo build-sbf` for program builds. Programs depend on `solex-lang`; `solex setup` installs the agent skill and can register the MCP server with Claude Code.
 
 ## Usage
 
@@ -55,9 +59,20 @@ solex init counter --cluster stable=mainnet-beta --cluster nightly=devnet
 cd counter
 ```
 
-See what each channel ships, one row per feature:
+See the channels and what each one ships:
 
 ```console
+$ solex channels
+  ┌────────────────────────────────────────────────────────────────────────────┐
+  │ stable  mainnet-beta                                               default │
+  │ program   2mwK…UsqH                                                        │
+  ├────────────────────────────────────────────────────────────────────────────┤
+  │ nightly  devnet                                                            │
+  │ program   9rws…KGMs                                                        │
+  │ includes  stable                                                           │
+  │ features  reset (from epoch 1000)                                          │
+  └────────────────────────────────────────────────────────────────────────────┘
+
 $ solex features
   ┌────────────────────────────────────────────────────────────────────────────┐
   │ #[channel(stable)]  stable  nightly                                2 gates │
@@ -67,31 +82,35 @@ $ solex features
   └────────────────────────────────────────────────────────────────────────────┘
 ```
 
-`solex features reset` lists that feature's markers with file and line, `--items` lists all of them, `--json` is for tooling.
-
-Build and deploy a channel:
+Build and deploy a channel. Any declared channel name works as a flag:
 
 ```console
-solex build --channel nightly
-solex deploy --channel nightly
+$ solex build --nightly
+  ┌────────────────────────────────────────────────────────────────────────────┐
+  │ nightly  devnet                                            98.9 KiB  761ms │
+  │ program   9rws…KGMs                                                        │
+  │ features  reset                                                            │
+  │ artifact  target/solex/nightly/counter.so                                  │
+  └────────────────────────────────────────────────────────────────────────────┘
+$ solex deploy --nightly
 ```
 
 | Command | Purpose |
 |---|---|
 | `solex init <name>` | scaffold a project; `--channels a,b,c`, `--cluster ch=cluster`, `--format toml` |
-| `solex features [name] [--items] [--json] [--check]` | one row per feature; `name` lists that feature's markers; `--check` fails on undeclared, unused or untracked gating |
-| `solex channels` | channels, program ids, clusters, resolved tag sets |
-| `solex build [--channel c \| --all]` | `cargo build-sbf` into `target/solex/<channel>/` |
-| `solex deploy [--channel c] [--build]` | `solana program deploy` with the channel's id, cluster and authority |
-| `solex terminate [--channel c] [--buffers] --yes` | `solana program close`: reclaim ProgramData or buffer rent; mainnet needs `--allow-mainnet` |
-| `solex env [--format shell\|dotenv\|json]` | the channel environment for other build pipelines |
-| `solex exec [--channel c] -- <cmd>` | run any command with the channel selected |
+| `solex channels` | deployments, program ids, clusters, includes, features, vars |
+| `solex features [name] [--items] [--json] [--check]` | one entry per feature; `name` lists that feature's markers with file:line |
+| `solex build [--<channel> \| --all] [--cluster c]` | `cargo build-sbf` with the channel's features into `target/solex/<channel>/` |
+| `solex deploy [--<channel>] [--build] [--dry-run]` | `solana program deploy` with the channel's id, cluster and authority |
+| `solex terminate [--<channel>] [--buffers] --yes` | `solana program close`; reclaims rent; mainnet needs `--allow-mainnet` |
+| `solex test [--<channel>] [-- args]` | `cargo test` with the channel selected and its features enabled |
+| `solex env [--format shell\|dotenv\|json]` | `SOLEX_CHANNEL`, `SOLEX_MANIFEST`, `SOLEX_CLUSTER`, `SOLEX_FEATURES` for other pipelines |
+| `solex exec [--<channel>] -- <cmd>` | run any command with the channel selected |
 | `solex keys list \| new \| check` | per-channel program keypairs |
-| `solex test [--channel c \| --all]` | `cargo test` with the channel selected |
 | `solex setup [--mcp]` | install the agent skill; register the MCP server with Claude Code |
-| `solex mcp` | MCP server: channels, feature matrix, builds, deploy plans |
+| `solex mcp` | MCP server: channels, features, builds, deploy plans |
 
-Channel selection everywhere: `--channel`, else `SOLEX_CHANNEL`, else `default_channel` in the manifest.
+Channel selection everywhere: `--<channel>` or `--channel <name>`, else `SOLEX_CHANNEL`, else `default_channel` in the manifest.
 
 ## In the program
 
@@ -103,25 +122,31 @@ hooks = []
 
 ```toml
 # Solex.toml
-default_channel = "localnet"
+default_channel = "stable"
 
-[channels.mainnet]
+[channels.stable]
+description = "V1 instruction set, the audited surface"
 program_id = "CHNLxYvV…"
 cluster = "mainnet-beta"
+vars = { treasury_owner = "Cs2zdf…" }
 
-[channels.devnet]
-includes = ["mainnet"]
+[channels.nightly]
+description = "stable plus the hooks feature"
+includes = ["stable"]
 program_id = "CHNLxBtX…"
 cluster = "devnet"
+vars = { treasury_owner = "4zTeC5…" }
 
 [features.hooks]
 description = "V2 lifecycle hooks"
-channels = ["devnet"]              # enabled on devnet and on channels that include it
-epoch = { mainnet = 850 }          # if it ever ships on mainnet, inactive until epoch 850
+channels = ["nightly"]             # add "stable" here to promote
+epoch = { stable = 850 }           # once on stable, inactive until epoch 850
 ```
 
 ```rust
 solex::declare_id!();              // program id of the channel being built
+
+pub const TREASURY_OWNER: [u8; 32] = decode_pubkey(solex::var!("treasury_owner"));
 
 #[cfg(feature = "hooks")]
 OpenWithHooks(OpenArgs<'a>) = 10,  // any item, variant, arm or field: plain cfg
@@ -131,19 +156,15 @@ OpenWithHooks(OpenArgs<'a>) = 10,  // any item, variant, arm or field: plain cfg
 pub fn open_with_hooks(...) -> ProgramResult { ... }
 ```
 
-Features are declared once. Moving `hooks` to mainnet is editing `channels = [...]`; no source changes, and nothing to forget. `solex build`, `solex test` and `solex env` pass the channel's features as `--features`.
-
 ```console
 $ solex features
-
-  feature  channels  gates  mainnet  testnet  devnet  localnet
-  ───────  ────────  ─────  ───────  ───────  ──────  ────────
-  hooks    devnet       24     –        –       ✓        ✓
-    V2 lifecycle hooks
-    OpenWithHooks, TopUpWithHooks, DistributeWithHooks, WithdrawPayerWithHooks
-    process_with_hooks ×3, load_with_hooks
-    + 12 match arms, 4 consts
+  ┌────────────────────────────────────────────────────────────────────────────┐
+  │ hooks  nightly                                                    24 gates │
+  │ V2 lifecycle hooks                                                         │
+  └────────────────────────────────────────────────────────────────────────────┘
 ```
+
+Features are declared once, so there is nothing to forget across the 24 markers of a real instruction family. `solex features --check` also catches a feature in the manifest that `Cargo.toml` does not declare, one that no `cfg` uses, and a `build.rs` that does not list `SOLEX_CHANNEL`, `SOLEX_MANIFEST` and `SOLEX_CLUSTER` under `rerun-if-env-changed`, which would let cargo reuse another channel's compilation.
 
 ### Channel tags
 
@@ -155,23 +176,7 @@ For code tied to a release train rather than a feature, `#[channel(...)]` gates 
 | `#[channel(stable, nightly)]` | compiled if the channel ships any listed tag |
 | `#[channel([nightly, 850])]` | compiled into `nightly`; inactive until epoch 850 |
 
-Attribute macros cannot sit on enum variants or `match` arms, so for those `#[solex::gated]` on the enclosing item resolves nested `#[channel]` markers; `#[solex::program]` does this for Anchor modules. Cargo features need none of this: `#[cfg]` is allowed everywhere.
-
-### Per-channel constants: `solex::var!`
-
-Values that differ per deployment live next to the program id instead of in mutually exclusive cargo features:
-
-```toml
-[channels.mainnet]
-program_id = "..."
-vars = { treasury_owner = "Cs2zdfUNonRdRGsiZUQQLdTxzxVvJZmgiX2mpLYKuEqP" }
-```
-
-```rust
-const TREASURY_OWNER: [u8; 32] = decode_pubkey(solex::var!("treasury_owner"));
-```
-
-A channel without the var fails to compile, so a placeholder can never reach a real cluster.
+Attribute macros cannot sit on enum variants or `match` arms, so for those `#[solex::gated]` on the enclosing item resolves nested `#[channel]` markers; `#[solex::program]` does this for Anchor modules. Cargo features need none of this.
 
 ### One channel, several clusters
 
@@ -188,11 +193,11 @@ program_id = "CHNLxBtX…"
 vars = { treasury_owner = "4zTeC5…" }
 ```
 
-Because `var!` and `declare_id!` resolve at compile time, a channel with overrides is one artifact per cluster: `target/solex/stable/mainnet-beta/` and `target/solex/stable/devnet/`, each with `SOLEX_CLUSTER` set, and `solex deploy` sends each to its cluster. `--cluster` narrows any command to one. A channel without `program_id` is tag-only: it names a surface for other channels to `include` and is never built.
+Because `var!` and `declare_id!` resolve at compile time, a channel with overrides is one artifact per cluster, `target/solex/stable/mainnet-beta/` and `target/solex/stable/devnet/`, each built with `SOLEX_CLUSTER` set; `solex deploy` sends each to its cluster and `--cluster` narrows any command to one. A build that cannot tell which cluster it is for fails rather than guessing. A channel without `program_id` is tag-only: it names a surface for other channels to `include` and is never built.
 
 ## Build pipelines
 
-Solex owns the environment and the feature list at build time. The proc macros read `SOLEX_CHANNEL` (and `SOLEX_MANIFEST`, `SOLEX_CLUSTER`) at expansion time; the channel's features go to cargo as `--features`. `solex build` is a convenience over that:
+Solex owns two things at build time: the environment the proc macros read (`SOLEX_CHANNEL`, `SOLEX_MANIFEST`, `SOLEX_CLUSTER`) and the `--features` list. `solex build` is a convenience over that:
 
 ```toml
 [build]
@@ -210,40 +215,42 @@ artifact = "target/bpfel-unknown-none/release/lib{lib}.so"   # copied to target/
 For a pipeline solex should not drive at all:
 
 ```sh
-eval "$(solex env --channel devnet)"     # SOLEX_CHANNEL, SOLEX_MANIFEST, SOLEX_FEATURES=hooks
+eval "$(solex env --nightly)"            # SOLEX_CHANNEL, SOLEX_MANIFEST, SOLEX_FEATURES=hooks
 cargo +nightly build-bpf --features "$SOLEX_FEATURES"
-solex exec --channel devnet -- cargo test --features "$SOLEX_FEATURES"
+solex exec --nightly -- cargo test --features "$SOLEX_FEATURES"
 ```
+
+Verified builds work the same way: the container running `solana-verify` must see the same variables and features.
 
 ## Frameworks
 
-`solex-lang` defaults to Anchor: `#[solex::program]` applies channel gating, then hands the module to `#[anchor_lang::program]`. With `default-features = false` and `features = ["pinocchio"]` the crate is `no_std`, `declare_id!` wraps `pinocchio::address::declare_id!`, and the epoch gate reads pinocchio's Clock sysvar. `features = ["native"]` targets the modular `solana-*` crates.
+`solex-lang` defaults to Anchor: `#[solex::program]` applies channel gating, then hands the module to `#[anchor_lang::program]`, and `declare_id!` wraps Anchor's. With `default-features = false` and `features = ["pinocchio"]` the crate is `no_std`, `declare_id!` wraps `pinocchio::address::declare_id!`, and the epoch gate reads pinocchio's Clock sysvar. `features = ["native"]` targets the modular `solana-*` crates.
 
 ### For framework authors
 
 The crates are split so a framework CLI can offer channels without shelling out to `solex`:
 
-- **`solex-types`** is plain serde data. Deserialize the `solex` section of your own manifest into `solex_types::Channels` and you have tag resolution, `includes`, and `resolve()` for free. Features `yaml`, `toml` and `spec` are all optional.
-- **`solex-core`** takes that section through `Project::from_parts` and exposes `build::channel_env` (the environment your `cargo build-sbf` call needs so the proc macros resolve the channel), plus the scan, deploy and keypair logic.
+- **`solex-types`** is plain serde data. Deserialize the `solex` section of your own manifest into `solex_types::Channels` and you have channel resolution, `includes`, features per channel and activation epochs. The `yaml`, `toml` and `spec` features are optional.
+- **`solex-core`** takes that section through `Project::from_parts` and exposes `build::target_env` and `build::channel_features`, the environment and `--features` your own `cargo build-sbf` call needs, plus the scan, deploy and keypair logic.
 - The proc macros find the configuration by walking up from `CARGO_MANIFEST_DIR`, or read the file named by `SOLEX_MANIFEST`. A host manifest with a `solex` key is accepted as-is, so your users keep one config file.
 
 ## Architecture & How to Contribute
 
 | Crate | Purpose |
 |---|---|
-| `crates/types` | `solex-types`: the embeddable `solex` section, channel resolution, `#[channel]` grammar; YAML and TOML |
-| `crates/macros` | proc macros |
-| `crates/lang` | `solex-lang`, the crate programs depend on (`use solex::...`) |
-| `crates/core` | `solex-core`: build, deploy, scan and scaffold logic, reusable from other CLIs |
-| `crates/cli` | the `solex` binary (`cargo install solex`) |
-| `tests/native` | macro tests on a framework-free program with a `Solex.toml`, run once per channel |
-| `tests/pinocchio` | `no_std` compile check of the `pinocchio` feature with hand-rolled dispatch |
+| `crates/types` | `solex-types`: the `solex` manifest section (channels, features, overrides), resolution rules, `#[channel]` grammar; YAML and TOML |
+| `crates/macros` | proc macros: `declare_id!`, `var!`, `activation`, `channel`, `gated`, `program` |
+| `crates/lang` | `solex-lang`, the crate programs depend on (`use solex::...`); Anchor, Pinocchio or native |
+| `crates/core` | `solex-core`: build, deploy, terminate, scan and scaffold logic, reusable from other CLIs |
+| `crates/cli` | the `solex` binary (`cargo install solex`) and its display components |
 | `crates/mcp` | `solex-mcp`: thin MCP server over core (`solex mcp`) |
+| `tests/native` | macro and feature tests on a framework-free program, run once per channel |
+| `tests/pinocchio` | `no_std` compile check of the `pinocchio` feature with hand-rolled dispatch |
 | `skills/solex` | agent skill (skills.sh compatible) on channels and gating; `solex setup` installs it |
 | `examples/counter` | the program `solex init` produces |
 
 ```console
-just test            # workspace tests + native tests on every fixture channel
+just test            # workspace tests, native tests per channel, pinocchio check
 just example-check   # type-check the Anchor example per channel
 just example-build   # cargo build-sbf of the example for every channel
 ```

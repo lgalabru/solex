@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-// Program id of the channel being built, from Solex.yaml.
+// Program id of the channel being built, from the solex manifest.
 solex::declare_id!();
 
 #[solex::program]
