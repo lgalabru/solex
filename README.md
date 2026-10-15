@@ -58,7 +58,7 @@ cd solex
 just install        # cargo install --path crates/cli --force
 ```
 
-Requires the Solana CLI with `cargo build-sbf` for program builds. Programs depend on `solex-lang`; `solex setup` installs the agent skill and registers the MCP server with Claude Code.
+Requires the Solana CLI with `cargo build-sbf` for program builds. Programs depend on `solex-lang`; `solex setup` installs the agent skill and registers the MCP server with Claude Code and Codex.
 
 ## Usage
 
@@ -117,7 +117,7 @@ $ solex deploy --canary
 | `solex env [--format shell\|dotenv\|json]` | `SOLEX_CHANNEL`, `SOLEX_MANIFEST`, `SOLEX_CLUSTER`, `SOLEX_FEATURES` for other pipelines |
 | `solex exec [--<channel>] -- <cmd>` | run any command with the channel selected |
 | `solex keys list \| new \| check` | per-channel program keypairs |
-| `solex setup` | install the agent skill and register the MCP server with Claude Code; `--no-skill`, `--no-mcp` |
+| `solex setup` | install the agent skill and register the MCP server with Claude Code and Codex; `--no-skill`, `--no-mcp` |
 | `solex mcp` | MCP server: channels, features, builds, deploy plans |
 
 Channel selection everywhere: `--<channel>` or `--channel <name>`, else `SOLEX_CHANNEL`, else `default_channel` in the manifest.

@@ -306,6 +306,17 @@ impl SolexMcp {
     }
 }
 
+/// Names of the tools this server exposes, in registration order; used by
+/// `solex setup` to tell the user what their agent just gained.
+pub fn tool_names() -> Vec<String> {
+    SolexMcp::new()
+        .tool_router
+        .list_all()
+        .into_iter()
+        .map(|t| t.name.to_string())
+        .collect()
+}
+
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for SolexMcp {
     fn get_info(&self) -> ServerConfig {

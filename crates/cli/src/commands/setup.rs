@@ -1,5 +1,5 @@
 //! `solex setup`: install the agent skill and register the MCP server with
-//! Claude Code; `--no-skill` / `--no-mcp` skip either half.
+//! Claude Code and Codex; `--no-skill` / `--no-mcp` skip either half.
 
 use std::process::{Command, Stdio};
 
@@ -17,7 +17,7 @@ pub struct SetupCommand {
     #[arg(long)]
     pub no_skill: bool,
 
-    /// Skip registering `solex mcp` with Claude Code (user scope)
+    /// Skip registering `solex mcp` with Claude Code and Codex (user scope)
     #[arg(long)]
     pub no_mcp: bool,
 }
@@ -87,9 +87,29 @@ fn install_skill() -> Result<()> {
     }
 }
 
-/// Whether Claude Code already knows a `solex` MCP server.
-fn mcp_registered() -> bool {
-    Command::new("claude")
+/// An agent CLI that manages MCP servers with `<cli> mcp add|get`.
+struct Agent {
+    label: &'static str,
+    bin: &'static str,
+    /// Arguments placed between `mcp add` and the server name.
+    add_flags: &'static [&'static str],
+}
+
+const AGENTS: &[Agent] = &[
+    Agent {
+        label: "Claude Code",
+        bin: "claude",
+        add_flags: &["--scope", "user"],
+    },
+    Agent {
+        label: "Codex",
+        bin: "codex",
+        add_flags: &[],
+    },
+];
+
+fn registered_with(agent: &Agent) -> bool {
+    Command::new(agent.bin)
         .args(["mcp", "get", "solex"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -97,63 +117,58 @@ fn mcp_registered() -> bool {
         .is_ok_and(|s| s.success())
 }
 
+/// Register `solex mcp` with every agent CLI on PATH (Claude Code, Codex),
+/// skipping the ones that already have it.
 fn register_mcp() -> Result<()> {
     let solex_bin = std::env::current_exe()
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or_else(|_| "solex".into());
-    if !has("claude") {
+    let tools = format!("tools  {}", solex_mcp::tool_names().join(", "));
+
+    let found: Vec<&Agent> = AGENTS.iter().filter(|a| has(a.bin)).collect();
+    if found.is_empty() {
         components::print_notice(
             components::NoticeLevel::Warning,
-            "`claude` CLI not found; add this to your MCP client config",
-            &serde_json::to_string_pretty(&serde_json::json!({
-                "mcpServers": { "solex": { "command": solex_bin, "args": ["mcp"] } }
-            }))
-            .unwrap_or_default(),
+            "No agent CLI found (claude, codex); add the MCP server to your client yourself",
+            &format!(
+                "{}\n{tools}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "mcpServers": { "solex": { "command": solex_bin, "args": ["mcp"] } }
+                }))
+                .unwrap_or_default()
+            ),
         );
         return Ok(());
     }
-    if mcp_registered() {
-        components::print_notice(
-            components::NoticeLevel::Success,
-            "MCP server already registered with Claude Code",
-            "claude mcp get solex shows it; claude mcp remove solex to re-register.",
-        );
-        return Ok(());
-    }
-    let status = Command::new("claude")
-        .args([
-            "mcp", "add", "--scope", "user", "solex", "--", &solex_bin, "mcp",
-        ])
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .output();
-    match status {
-        Ok(out) if out.status.success() => {
-            components::print_notice(
-                components::NoticeLevel::Success,
-                "MCP server registered with Claude Code",
-                &format!(
-                    "{solex_bin} mcp (user scope)\nclaude mcp list shows it; tools: channels, features, build, deploy_plan"
-                ),
-            );
-            Ok(())
+
+    let mut done = Vec::new();
+    for agent in found {
+        if registered_with(agent) {
+            done.push(agent.label);
+            continue;
         }
-        Ok(out) => {
-            let msg = String::from_utf8_lossy(&out.stderr);
-            if msg.contains("already exists") {
-                components::print_notice(
-                    components::NoticeLevel::Success,
-                    "MCP server already registered with Claude Code",
-                    "claude mcp remove solex, then solex setup, to re-register.",
-                );
-                Ok(())
-            } else {
-                Err(CoreError::message(format!(
-                    "claude mcp add failed:\n{}",
-                    msg.trim()
-                )))
-            }
+        let out = Command::new(agent.bin)
+            .args(["mcp", "add"])
+            .args(agent.add_flags)
+            .args(["solex", "--", &solex_bin, "mcp"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .output()
+            .map_err(|e| CoreError::message(format!("failed to run {}: {e}", agent.bin)))?;
+        let msg = String::from_utf8_lossy(&out.stderr);
+        if !out.status.success() && !msg.contains("already exists") {
+            return Err(CoreError::message(format!(
+                "{} mcp add failed:\n{}",
+                agent.bin,
+                msg.trim()
+            )));
         }
-        Err(e) => Err(CoreError::message(format!("failed to run claude: {e}"))),
+        done.push(agent.label);
     }
+    components::print_notice(
+        components::NoticeLevel::Success,
+        "MCP server registered",
+        &format!("{}\n{tools}", done.join(", ")),
+    );
+    Ok(())
 }

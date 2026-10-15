@@ -174,7 +174,7 @@ Steps:
 - `solex test --channel c -- <cargo test args>`: tests with the channel set
   and its features enabled.
 - `solex setup [--no-skill] [--no-mcp]`: install this skill and register the
-  MCP server with Claude Code.
+  MCP server with Claude Code and Codex.
 
 Channel selection everywhere: `--channel`, else `SOLEX_CHANNEL`, else
 `default_channel` in the manifest.
