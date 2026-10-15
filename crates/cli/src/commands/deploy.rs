@@ -154,10 +154,11 @@ impl DeployCommand {
             components::print_notice_lines(
                 components::NoticeLevel::Success,
                 &format!("Deployed {} to {target}", plan.channel),
-                &[
+                &[format!(
+                    "{}  {}",
                     components::explorer_link(&id, &id, cluster),
-                    components::click_hint("Solana Explorer"),
-                ],
+                    components::click_hint("Explorer")
+                )],
             );
         }
         Ok(())
