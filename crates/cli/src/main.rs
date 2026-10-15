@@ -42,9 +42,6 @@ enum Command {
     Channels(commands::channels::ChannelsCommand),
     /// Show the #[channel] matrix: which items ship on which channel
     Features(commands::features::FeaturesCommand),
-    /// Manage per-channel program keypairs
-    #[command(subcommand)]
-    Keys(commands::keys::KeysCommand),
     /// Run `cargo test` with the channel selected
     Test(commands::test::TestCommand),
     /// Print the resolved channel name (for scripts)
@@ -99,7 +96,6 @@ fn main() {
         Command::Exec(cmd) => cmd.execute(),
         Command::Channels(cmd) => cmd.execute(),
         Command::Features(cmd) => cmd.execute(),
-        Command::Keys(cmd) => cmd.execute(),
         Command::Test(cmd) => cmd.execute(),
         Command::Channel(cmd) => cmd.execute(),
         Command::Setup(cmd) => cmd.execute(),

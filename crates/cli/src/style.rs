@@ -14,14 +14,6 @@ pub fn init(color: bool) {
     console::set_colors_enabled_stderr(enabled);
 }
 
-pub fn ok() -> String {
-    style("✓").green().bold().to_string()
-}
-
-pub fn fail() -> String {
-    style("✗").red().bold().to_string()
-}
-
 pub fn bold(s: &str) -> String {
     style(s).bold().to_string()
 }

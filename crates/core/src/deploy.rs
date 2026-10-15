@@ -132,8 +132,8 @@ fn plan_for(
         if actual != program_id {
             return Err(CoreError::message(format!(
                 "keypair {} is for {actual}, but channel `{channel}` declares program_id \
-                 {program_id}\n  Fix Solex.yaml or regenerate with `solex keys new --channel \
-                 {channel} --force`.",
+                 {program_id}\n  Point the manifest's `keypair` at the right file or fix \
+                 `program_id`.",
                 keypair_path.display()
             )));
         }

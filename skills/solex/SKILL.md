@@ -175,7 +175,6 @@ Steps:
   pipeline (sbpf-linker, solana-verify, CI). Solex owns `SOLEX_CHANNEL`,
   `SOLEX_MANIFEST`, `SOLEX_FEATURES` and, with per-cluster overrides,
   `SOLEX_CLUSTER`.
-- `solex keys list | new --channel c [--cluster x] | check`: channel keypairs under `keys/`.
 - `solex test --channel c -- <cargo test args>`: tests with the channel set
   and its features enabled.
 - `solex setup [--no-skill] [--no-mcp]`: install this skill and register the

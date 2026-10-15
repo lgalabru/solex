@@ -7,7 +7,6 @@ pub mod env;
 pub mod exec;
 pub mod features;
 pub mod init;
-pub mod keys;
 pub mod mcp;
 pub mod setup;
 pub mod terminate;
