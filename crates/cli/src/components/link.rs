@@ -45,14 +45,14 @@ pub fn explorer_link(text: &str, address: &str, cluster: Option<&str>) -> String
 }
 
 /// How to follow a terminal link on this platform, e.g.
-/// `⌘+click opens Solana Explorer`.
+/// `[⌘ + click] opens Solana Explorer`.
 pub fn click_hint(what: &str) -> String {
     let modifier = if cfg!(target_os = "macos") {
         "⌘"
     } else {
         "ctrl"
     };
-    format!("{modifier}+click opens {what}")
+    format!("[{modifier} + click] opens {what}")
 }
 
 #[cfg(test)]

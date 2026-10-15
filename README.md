@@ -103,7 +103,19 @@ $ solex build --canary
   │ artifact  target/solex/canary/counter.so                                   │
   └────────────────────────────────────────────────────────────────────────────┘
 $ solex deploy --canary
+✔ Deploy canary to (space toggles, enter confirms) · devnet  9rws…KGMs
+  ┌────────────────────────────────────────────────────────────────────────────┐
+  │ canary  devnet                                                             │
+  │ program   9rws…KGMs                                                        │
+  │ features  reset                                                            │
+  │ artifact  target/solex/canary/counter.so                                   │
+  └────────────────────────────────────────────────────────────────────────────┘
+│ Deployed canary to devnet
+│ 9rwsA9m17bLqtT1GZcjGZiWfzm4yXsu1p6w7AiAPKGMs ↗
+│ [⌘ + click] opens Solana Explorer
 ```
+
+`deploy` asks which of the channel's clusters to send to; `-y` skips the question in CI.
 
 | Command | Purpose |
 |---|---|
