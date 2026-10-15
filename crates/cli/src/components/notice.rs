@@ -6,8 +6,6 @@
 //! │ cluster  devnet
 //! ```
 
-use std::sync::atomic::{AtomicBool, Ordering};
-
 use crate::style;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,15 +45,8 @@ pub fn notice(level: NoticeLevel, title: &str, body: &str) -> String {
     out
 }
 
-static PRINTED: AtomicBool = AtomicBool::new(false);
-
 /// Print a notice to stderr, so stdout stays usable for `--json` and pipes.
-/// A blank line separates it from any notice printed earlier in the run, so
-/// two notices never read as one block.
 pub fn print_notice(level: NoticeLevel, title: &str, body: &str) {
-    if PRINTED.swap(true, Ordering::Relaxed) {
-        eprintln!();
-    }
     eprint!("{}", notice(level, title, body));
 }
 
