@@ -173,7 +173,8 @@ Steps:
 - `solex keys list | new --channel c | check`: channel keypairs under `keys/`.
 - `solex test --channel c -- <cargo test args>`: tests with the channel set
   and its features enabled.
-- `solex setup [--mcp]`: install this skill; register the MCP server.
+- `solex setup [--no-skill] [--no-mcp]`: install this skill and register the
+  MCP server with Claude Code.
 
 Channel selection everywhere: `--channel`, else `SOLEX_CHANNEL`, else
 `default_channel` in the manifest.

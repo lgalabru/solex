@@ -1,5 +1,5 @@
-//! `solex setup`: install the agent skill and, on request, register the MCP
-//! server with Claude Code.
+//! `solex setup`: install the agent skill and register the MCP server with
+//! Claude Code; `--no-skill` / `--no-mcp` skip either half.
 
 use std::process::{Command, Stdio};
 
@@ -17,9 +17,9 @@ pub struct SetupCommand {
     #[arg(long)]
     pub no_skill: bool,
 
-    /// Register `solex mcp` with Claude Code (user scope)
+    /// Skip registering `solex mcp` with Claude Code (user scope)
     #[arg(long)]
-    pub mcp: bool,
+    pub no_mcp: bool,
 }
 
 impl SetupCommand {
@@ -27,15 +27,8 @@ impl SetupCommand {
         if !self.no_skill {
             install_skill()?;
         }
-        if self.mcp {
+        if !self.no_mcp {
             register_mcp()?;
-        } else if !mcp_registered() {
-            components::print_notice(
-                components::NoticeLevel::Warning,
-                "MCP server not registered",
-                "solex setup --mcp registers it with Claude Code, or add it yourself:\n\
-                 claude mcp add --scope user solex -- solex mcp",
-            );
         }
         Ok(())
     }
@@ -94,8 +87,7 @@ fn install_skill() -> Result<()> {
     }
 }
 
-/// Whether Claude Code already knows a `solex` MCP server. Without the
-/// `claude` CLI there is nothing to check, so the hint is shown.
+/// Whether Claude Code already knows a `solex` MCP server.
 fn mcp_registered() -> bool {
     Command::new("claude")
         .args(["mcp", "get", "solex"])
@@ -117,6 +109,14 @@ fn register_mcp() -> Result<()> {
                 "mcpServers": { "solex": { "command": solex_bin, "args": ["mcp"] } }
             }))
             .unwrap_or_default(),
+        );
+        return Ok(());
+    }
+    if mcp_registered() {
+        components::print_notice(
+            components::NoticeLevel::Success,
+            "MCP server already registered with Claude Code",
+            "claude mcp get solex shows it; claude mcp remove solex to re-register.",
         );
         return Ok(());
     }
@@ -143,8 +143,8 @@ fn register_mcp() -> Result<()> {
             if msg.contains("already exists") {
                 components::print_notice(
                     components::NoticeLevel::Success,
-                    "MCP server already registered",
-                    "claude mcp remove solex, then solex setup --mcp, to re-register.",
+                    "MCP server already registered with Claude Code",
+                    "claude mcp remove solex, then solex setup, to re-register.",
                 );
                 Ok(())
             } else {
