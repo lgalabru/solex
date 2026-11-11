@@ -9,9 +9,12 @@ use std::path::PathBuf;
 pub mod build;
 pub mod deploy;
 pub mod keys;
+pub mod metadata;
+pub mod program_metadata;
 pub mod project;
 pub mod scaffold;
 pub mod scan;
+pub mod solana;
 pub mod terminate;
 
 pub use project::Project;

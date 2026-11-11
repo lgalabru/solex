@@ -32,6 +32,8 @@ enum Command {
     Build(commands::build::BuildCommand),
     /// Deploy a channel's build to its cluster
     Deploy(commands::deploy::DeployCommand),
+    /// Upload a channel's program metadata (IDL, ...) declared under [metadata.<seed>]
+    Metadata(commands::metadata::MetadataCommand),
     /// Terminate a channel: close its program or buffers and reclaim rent
     Terminate(commands::terminate::TerminateCommand),
     /// Print the environment that selects a channel, for other build pipelines
@@ -91,6 +93,7 @@ fn main() {
         Command::Init(cmd) => cmd.execute(),
         Command::Build(cmd) => cmd.execute(),
         Command::Deploy(cmd) => cmd.execute(),
+        Command::Metadata(cmd) => cmd.execute(),
         Command::Terminate(cmd) => cmd.execute(),
         Command::Env(cmd) => cmd.execute(),
         Command::Exec(cmd) => cmd.execute(),

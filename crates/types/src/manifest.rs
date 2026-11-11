@@ -3,6 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{Channels, Error, Result};
@@ -44,13 +45,70 @@ pub struct Manifest {
     /// How to turn the program crate into a `.so`. Defaults to `cargo build-sbf`.
     #[serde(default, skip_serializing_if = "BuildConfig::is_default")]
     pub build: BuildConfig,
+    /// Program metadata uploaded through the Program Metadata program, keyed
+    /// by seed (`idl`, `security`, ...). See [`MetadataConfig`].
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub metadata: IndexMap<String, MetadataConfig>,
     #[serde(flatten)]
     pub channels: Channels,
 }
 
 impl Manifest {
     pub fn validate(&self) -> Result<()> {
-        self.channels.validate()
+        self.channels.validate()?;
+        for (seed, entry) in &self.metadata {
+            entry.validate(seed)?;
+        }
+        Ok(())
+    }
+}
+
+/// Longest seed the Program Metadata program accepts.
+pub const METADATA_SEED_MAX: usize = 16;
+
+/// One metadata account per channel deployment, written with
+/// with the Program Metadata program (see `solex_core::program_metadata`).
+///
+/// ```toml
+/// [metadata.idl]
+/// # optional: produces `file`; runs at the project root with the channel's
+/// # environment (SOLEX_CHANNEL, SOLEX_CLUSTER, SOLEX_FEATURES, SOLEX_PROGRAM_ID)
+/// command = ["just", "channel-idl"]
+/// # {channel}, {cluster}, {name}, {lib} and {out} (target/solex/<channel>[/<cluster>])
+/// file = "{out}/idl.json"
+/// ```
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MetadataConfig {
+    /// Program and arguments that produce `file`. Empty means the file is
+    /// already on disk.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub command: Vec<String>,
+    /// Path of the content to upload, relative to the project root.
+    pub file: String,
+    /// `json`, `yaml`, `toml` or `none`. Defaults to the file extension.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+}
+
+impl MetadataConfig {
+    pub fn validate(&self, seed: &str) -> Result<()> {
+        let invalid = |reason: &str| Error::InvalidMetadata {
+            seed: seed.to_string(),
+            reason: reason.to_string(),
+        };
+        if seed.is_empty() || seed.len() > METADATA_SEED_MAX {
+            return Err(invalid("seeds are 1 to 16 bytes"));
+        }
+        if self.file.trim().is_empty() {
+            return Err(invalid("`file` is required"));
+        }
+        if let Some(f) = &self.format {
+            if !matches!(f.as_str(), "json" | "yaml" | "toml" | "none") {
+                return Err(invalid("`format` is one of json, yaml, toml, none"));
+            }
+        }
+        Ok(())
     }
 }
 

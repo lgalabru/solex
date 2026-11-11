@@ -49,6 +49,20 @@ impl Keypair {
         std::fs::write(path, json).map_err(|e| CoreError::io("write", path, e))
     }
 
+    /// Raw public key.
+    pub fn pubkey_bytes(&self) -> [u8; 32] {
+        self.bytes[32..].try_into().expect("64-byte keypair")
+    }
+
+    /// Ed25519 signature of `message`.
+    pub fn sign(&self, message: &[u8]) -> [u8; 64] {
+        use ed25519_dalek::Signer;
+        let secret: [u8; 32] = self.bytes[..32].try_into().expect("64-byte keypair");
+        ed25519_dalek::SigningKey::from_bytes(&secret)
+            .sign(message)
+            .to_bytes()
+    }
+
     /// Base58 public key.
     pub fn pubkey(&self) -> String {
         bs58::encode(&self.bytes[32..]).into_string()

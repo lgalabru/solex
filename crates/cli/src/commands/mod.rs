@@ -8,6 +8,7 @@ pub mod exec;
 pub mod features;
 pub mod init;
 pub mod mcp;
+pub mod metadata;
 pub mod setup;
 pub mod terminate;
 pub mod test;

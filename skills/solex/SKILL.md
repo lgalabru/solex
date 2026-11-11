@@ -167,6 +167,15 @@ Steps:
   `sbpf_version`, the local Solana CLI is older than the `--arch` the
   manifest builds for: upgrade it, or pass `-- --skip-feature-verify` when
   the cluster is known to run that version.
+- `solex metadata --channel c [--cluster x] [--seed s] [--dry-run] [-y]`:
+  publishes each `[metadata.<seed>]` entry (`command` produces `file`, run
+  with `SOLEX_PROGRAM_ID` set) as canonical metadata through the Program
+  Metadata program, signed by the upgrade authority. Refuses an IDL naming
+  another program, skips unchanged content, resumes an interrupted create.
+  `--close-buffers` reclaims leftover buffers. `solex deploy --metadata` runs
+  it after each deploy. Use a dedicated RPC (`--rpc` or `SOLEX_RPC_DEVNET` /
+  `SOLEX_RPC_MAINNET`): public endpoints rate-limit the upload. Show the user
+  the dry run first on mainnet.
 - `solex terminate --channel c [--cluster x] [--buffers]`: prints the `solana program close`
   plan; only `--yes` sends it, and mainnet also needs `--allow-mainnet`.
   Terminating a program is permanent. Never pass `--yes` unless the user asked.

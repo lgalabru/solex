@@ -118,6 +118,7 @@ pub fn init(parent: &Path, opts: &InitOptions) -> Result<Created> {
         name: Some(opts.name.clone()),
         program_path: None,
         build: Default::default(),
+        metadata: Default::default(),
         channels: Channels {
             default_channel: Some(opts.channels[0].clone()),
             channels,

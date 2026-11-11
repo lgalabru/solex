@@ -123,6 +123,7 @@ $ solex deploy --canary
 | `solex features [name] [--items] [--json] [--check]` | one entry per feature; `name` lists that feature's markers with file:line |
 | `solex build [--<channel> \| --all] [--cluster c]` | `cargo build-sbf` with the channel's features into `target/solex/<channel>/` |
 | `solex deploy [--<channel>] [--build] [--dry-run] [-y] [-- <args>]` | `solana program deploy` with the channel's id, cluster and authority; asks which cluster(s), `-y` skips; `-- <args>` go to the Solana CLI |
+| `solex metadata [--<channel>] [--cluster c] [--seed s] [--dry-run] [-y]` | publish `[metadata.<seed>]` (IDL, ...) to the Program Metadata program; skips unchanged content, resumes interrupted writes; `--close-buffers` reclaims leftovers; `deploy --metadata` runs it after a deploy |
 | `solex terminate [--<channel>] [--buffers] --yes` | `solana program close`; reclaims rent; mainnet needs `--allow-mainnet` |
 | `solex test [--<channel>] [-- args]` | `cargo test` with the channel selected and its features enabled |
 | `solex env [--format shell\|dotenv\|json]` | `SOLEX_CHANNEL`, `SOLEX_MANIFEST`, `SOLEX_CLUSTER`, `SOLEX_FEATURES` for other pipelines |
@@ -214,6 +215,24 @@ vars = { treasury_owner = "4zTeC5…" }
 ```
 
 Because `var!` and `declare_id!` resolve at compile time, a channel with overrides is one artifact per cluster, `target/solex/stable/mainnet/` and `target/solex/stable/devnet/`, each built with `SOLEX_CLUSTER` set; `solex deploy` sends each to its cluster and `--cluster` narrows any command to one. A build that cannot tell which cluster it is for fails rather than guessing. A channel without `program_id` is tag-only: it names a surface for other channels to `include` and is never built.
+
+## On-chain metadata
+
+Each deployment can publish its IDL (or any other metadata) through the [Program Metadata program](https://github.com/solana-program/program-metadata). Solex talks to the program directly; no other CLI is involved.
+
+```toml
+[metadata.idl]
+command = ["just", "channel-idl"]          # optional; runs with SOLEX_CHANNEL, SOLEX_CLUSTER, SOLEX_FEATURES, SOLEX_PROGRAM_ID
+file = "target/solex/{channel}/idl.json"   # {channel} {cluster} {name} {lib} {out}
+# format = "json"                          # default from the extension
+```
+
+```sh
+solex metadata --canary --cluster devnet   # generate, check, compare, write
+solex deploy --canary --metadata           # the same, right after each deploy
+```
+
+Before writing, solex refuses an IDL whose program address is not the channel's (Codama `program.publicKey`, Anchor `address`), and skips the write when the chain already holds the same content. The account is canonical metadata, signed by the channel's `upgrade_authority` (or `--keypair`, else the Solana CLI keypair). A write interrupted halfway resumes from the buffer it left at the metadata address; `solex metadata --close-buffers` lists and closes any other buffers of the authority. Public RPCs rate-limit uploads of a few dozen transactions: set `SOLEX_RPC_DEVNET` / `SOLEX_RPC_MAINNET` or pass `--rpc`.
 
 ## Build pipelines
 

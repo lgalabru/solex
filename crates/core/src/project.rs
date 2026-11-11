@@ -55,6 +55,7 @@ impl Project {
                     name,
                     program_path,
                     build: Default::default(),
+                    metadata: Default::default(),
                     channels,
                 },
                 path: manifest_path.to_path_buf(),

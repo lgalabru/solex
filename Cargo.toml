@@ -46,6 +46,11 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tempfile = "3"
+ureq = { version = "3", features = ["json"] }
+flate2 = "1"
+base64 = "0.22"
+sha2 = "0.10"
+curve25519-dalek = "4"
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }

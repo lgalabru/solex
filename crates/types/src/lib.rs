@@ -28,7 +28,8 @@ pub use channels::{
 };
 pub use manifest::{
     BuildConfig, CHANNEL_ENV, CLUSTER_ENV, FEATURES_ENV, Format, HOST_FILES, Loaded, MANIFEST_ENV,
-    MANIFEST_FILES, Manifest, SECTION_KEY, Source, discover, find, load, parse, to_string,
+    MANIFEST_FILES, METADATA_SEED_MAX, Manifest, MetadataConfig, SECTION_KEY, Source, discover,
+    find, load, parse, to_string,
 };
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -105,4 +106,6 @@ pub enum Error {
     UnknownFeature { name: String, defined: Vec<String> },
     #[error("feature `{feature}` refers to unknown channel `{channel}`")]
     FeatureUnknownChannel { feature: String, channel: String },
+    #[error("[metadata.{seed}]: {reason}")]
+    InvalidMetadata { seed: String, reason: String },
 }

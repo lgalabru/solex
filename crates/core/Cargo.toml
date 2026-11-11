@@ -25,6 +25,11 @@ syn = { workspace = true }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = { workspace = true }
 walkdir = { workspace = true }
+ureq = { workspace = true }
+flate2 = { workspace = true }
+base64 = { workspace = true }
+sha2 = { workspace = true }
+curve25519-dalek = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

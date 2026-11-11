@@ -7,7 +7,9 @@ use solex_core::{
     deploy::{self, DeployOptions},
 };
 
-use crate::{commands, components, components::ChannelCard, style};
+use crate::{
+    commands, commands::metadata::MetadataCommand, components, components::ChannelCard, style,
+};
 
 #[derive(Args, Debug, Default)]
 pub struct DeployCommand {
@@ -31,6 +33,10 @@ pub struct DeployCommand {
     /// Override the channel's upgrade authority keypair
     #[arg(long)]
     pub upgrade_authority: Option<PathBuf>,
+
+    /// After each deploy, upload the [metadata.<seed>] entries (IDL, ...) to the same cluster
+    #[arg(long)]
+    pub metadata: bool,
 
     /// Print the deploy command(s) without running them
     #[arg(long)]
@@ -129,6 +135,9 @@ impl DeployCommand {
             let target = cluster.unwrap_or("(solana CLI default)");
             if self.dry_run {
                 println!("{}", build::display_command(&plan.command()));
+                if self.metadata {
+                    self.upload_metadata(&project, &plan)?;
+                }
                 continue;
             }
             let features = build::channel_features(&project, &plan.channel, &[])?;
@@ -160,7 +169,30 @@ impl DeployCommand {
                     components::click_hint("Explorer")
                 )],
             );
+            if self.metadata {
+                self.upload_metadata(&project, &plan)?;
+            }
         }
         Ok(())
+    }
+
+    /// The cluster was already chosen for the deploy, so the upload does not
+    /// ask again.
+    fn upload_metadata(
+        &self,
+        project: &solex_core::Project,
+        plan: &deploy::DeployPlan,
+    ) -> Result<()> {
+        let cmd = MetadataCommand {
+            dry_run: self.dry_run,
+            yes: true,
+            verbose: self.verbose,
+            keypair: self.upgrade_authority.clone(),
+            payer: self.keypair.clone(),
+            ..Default::default()
+        };
+        let mut opts = cmd.options();
+        opts.cluster = plan.cluster.clone();
+        cmd.run(project, &plan.channel, opts)
     }
 }
