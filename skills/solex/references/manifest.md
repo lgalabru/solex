@@ -47,8 +47,15 @@ channel's features; code gates on them with `#[cfg(feature = "hooks")]`.
 Fields per channel: `program_id` (required to build; a channel without one is
 tag-only and exists for others to `include`), `cluster` (`mainnet`, `devnet`,
 `testnet`, `localnet` or an RPC URL, or a list; `mainnet-beta` is accepted
-too), `keypair` (first deploy only), `upgrade_authority`, `includes`,
+too), `keypair` (first deploy only), `upgrade_authority` (a keypair file, or the
+address of an authority whose key is not on this machine), `includes`,
 `vars`, `description`.
+
+Before uploading, `solex deploy` reads the program's upgrade authority from
+the cluster. A declared keypair or address that is not that authority stops
+the deploy; with nothing declared, the chain's authority is used. An
+authority with no keypair here cannot be signed for yet, and the deploy
+stops before sending anything.
 
 Per-cluster overrides, `[channels.<channel>.<cluster>]`, may set `program_id`,
 `keypair`, `upgrade_authority` and `vars` (merged over the channel's). The

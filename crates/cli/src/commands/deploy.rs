@@ -3,7 +3,9 @@ use std::{io::IsTerminal, path::PathBuf};
 use clap::Args;
 use dialoguer::{MultiSelect, theme::ColorfulTheme};
 use solex_core::{
-    CoreError, Result, build,
+    CoreError, Result,
+    authority::Signer,
+    build,
     deploy::{self, DeployOptions},
 };
 
@@ -134,12 +136,24 @@ impl DeployCommand {
             let cluster = plan.cluster.as_deref();
             let target = cluster.unwrap_or("(solana CLI default)");
             if self.dry_run {
-                println!("{}", build::display_command(&plan.command()));
+                match &plan.authority_address {
+                    // The Solana CLI cannot sign for it, so there is no
+                    // command to print.
+                    Some(a) => println!(
+                        "# {} on {target}: upgrade authority {a} has no keypair here",
+                        plan.channel
+                    ),
+                    None => println!("{}", build::display_command(&plan.command())),
+                }
                 if self.metadata {
                     self.upload_metadata(&project, &plan)?;
                 }
                 continue;
             }
+            let sp = style::spinner(&format!("Checking the upgrade authority on {target}..."));
+            let signer = deploy::signer(&plan);
+            sp.finish_and_clear();
+            let signer = signer?;
             let features = build::channel_features(&project, &plan.channel, &[])?;
             println!(
                 "{}",
@@ -149,13 +163,40 @@ impl DeployCommand {
                     .artifact(project.root(), &plan.so_path)
                     .text(
                         "authority",
-                        plan.upgrade_authority
-                            .as_ref()
-                            .map(|p| p.display().to_string())
-                            .unwrap_or_default(),
+                        match &signer {
+                            Some(s) => s.describe(),
+                            None => plan
+                                .upgrade_authority
+                                .as_ref()
+                                .map(|p| p.display().to_string())
+                                .unwrap_or_default(),
+                        },
                     )
                     .frame()
             );
+            if let Some(Signer::Remote {
+                address, deployed, ..
+            }) = &signer
+            {
+                let what = if *deployed {
+                    format!(
+                        "the upgrade authority of {} on {target} is {address}, and its keypair \
+                         is not on this machine",
+                        plan.program_id
+                    )
+                } else {
+                    format!(
+                        "{} is not deployed on {target} yet, and the keypair of its declared \
+                         upgrade authority {address} is not on this machine",
+                        plan.program_id
+                    )
+                };
+                return Err(CoreError::message(format!(
+                    "{what}\n  Nothing was sent. Signing somewhere else is not built yet; to \
+                     sign here, point `upgrade_authority` (or --upgrade-authority) at its \
+                     keypair."
+                )));
+            }
             let sp = style::spinner(&format!("Deploying to {target}..."));
             let r = deploy::deploy(&plan, self.verbose);
             sp.finish_and_clear();

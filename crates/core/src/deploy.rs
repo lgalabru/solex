@@ -7,7 +7,12 @@ use std::{
     process::Command,
 };
 
-use crate::{CoreError, Project, Result, build, keys};
+use crate::{
+    CoreError, Project, Result,
+    authority::{self, Declared, Signer},
+    build, keys, metadata,
+    solana::Rpc,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct DeployOptions {
@@ -34,7 +39,11 @@ pub struct DeployPlan {
     /// Keypair passed as `--program-id` on a first deploy; `None` means the
     /// program id string is passed instead (upgrade of an existing program).
     pub program_keypair: Option<PathBuf>,
+    /// Upgrade authority keypair passed to the Solana CLI.
     pub upgrade_authority: Option<PathBuf>,
+    /// Upgrade authority declared as an address: its key is not on this
+    /// machine, so [`DeployPlan::command`] cannot sign for it.
+    pub authority_address: Option<String>,
     pub payer: Option<PathBuf>,
     pub extra_args: Vec<String>,
 }
@@ -142,11 +151,17 @@ fn plan_for(
         None
     };
 
-    let upgrade_authority = opts.upgrade_authority.clone().or_else(|| {
-        ch.upgrade_authority
-            .as_ref()
-            .map(|p| project.resolve_path(p))
-    });
+    let declared = match &opts.upgrade_authority {
+        Some(p) => Some(Declared::Keypair(p.clone())),
+        None => resolved
+            .upgrade_authority
+            .map(|p| authority::declared(project, p)),
+    };
+    let (upgrade_authority, authority_address) = match declared {
+        Some(Declared::Keypair(p)) => (Some(p), None),
+        Some(Declared::Address(a)) => (None, Some(a)),
+        None => (None, None),
+    };
 
     Ok(DeployPlan {
         channel: channel.to_string(),
@@ -155,9 +170,28 @@ fn plan_for(
         cluster,
         program_keypair,
         upgrade_authority,
+        authority_address,
         payer: opts.payer.clone(),
         extra_args: opts.extra_args.clone(),
     })
+}
+
+/// Who signs this deploy, checked against the cluster before anything is
+/// uploaded: the declared authority, else the keypair the Solana CLI would
+/// use, compared with the program's authority on chain. `None` when the plan
+/// has no cluster of its own (the Solana CLI's default applies).
+pub fn signer(plan: &DeployPlan) -> Result<Option<Signer>> {
+    let Some(cluster) = &plan.cluster else {
+        return Ok(None);
+    };
+    let declared = match (&plan.authority_address, &plan.upgrade_authority) {
+        (Some(a), _) => Some(Declared::Address(a.clone())),
+        (None, Some(p)) => Some(Declared::Keypair(p.clone())),
+        (None, None) => None,
+    };
+    let local = plan.payer.clone().or_else(metadata::solana_cli_keypair);
+    let rpc = Rpc::new(&metadata::rpc_url(cluster)).impatient();
+    authority::resolve(&rpc, &plan.program_id, declared.as_ref(), local.as_deref()).map(Some)
 }
 
 /// The Solana CLI verifies the ELF against the SBPF versions it knows before

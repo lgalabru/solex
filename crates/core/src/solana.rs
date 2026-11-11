@@ -291,6 +291,7 @@ pub struct Account {
 pub struct Rpc {
     url: String,
     agent: ureq::Agent,
+    attempts: u32,
 }
 
 const MAX_ATTEMPTS: u32 = 10;
@@ -306,7 +307,15 @@ impl Rpc {
         Self {
             url: url.to_string(),
             agent,
+            attempts: MAX_ATTEMPTS,
         }
+    }
+
+    /// Give up after two attempts: for a read made before any work starts,
+    /// where an unreachable cluster should be reported at once.
+    pub fn impatient(mut self) -> Self {
+        self.attempts = 2;
+        self
     }
 
     /// One call, retried with backoff on 429 / 5xx / transport errors.
@@ -314,7 +323,7 @@ impl Rpc {
         let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
         let mut delay = Duration::from_millis(500);
         let mut last = String::new();
-        for _ in 0..MAX_ATTEMPTS {
+        for _ in 0..self.attempts {
             let mut wait = delay;
             match self.agent.post(&self.url).send_json(&body) {
                 Ok(mut resp) => {
@@ -345,9 +354,19 @@ impl Rpc {
             std::thread::sleep(wait.max(delay));
             delay = (delay * 2).min(MAX_BACKOFF);
         }
+        // Only an HTTP status means the endpoint answered; anything else is
+        // the connection itself.
+        let hint = if last.starts_with("HTTP") {
+            "The RPC may be rate limiting; set SOLEX_RPC_<CLUSTER> (e.g. SOLEX_RPC_DEVNET) to a \
+             dedicated endpoint, or pass --rpc <url> to `solex metadata`."
+                .to_string()
+        } else {
+            let url = self.url.split('?').next().unwrap_or_default();
+            format!("Could not reach {url}; is the cluster running and the URL right?")
+        };
         Err(CoreError::message(format!(
-            "{method} failed after {MAX_ATTEMPTS} attempts: {last}\n  The RPC may be rate limiting; \
-             pass --rpc <url> or set SOLEX_RPC_<CLUSTER> (e.g. SOLEX_RPC_DEVNET)."
+            "{method} failed after {} attempts: {last}\n  {hint}",
+            self.attempts
         )))
     }
 

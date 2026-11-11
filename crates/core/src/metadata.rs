@@ -16,7 +16,7 @@ use std::{
 use solex_types::MetadataConfig;
 
 use crate::{
-    CoreError, Project, Result, build,
+    CoreError, Project, Result, authority, build,
     keys::Keypair,
     program_metadata::{self, Format, WriteReport, WriteRequest},
     solana::{self, Rpc},
@@ -198,10 +198,11 @@ pub fn plans(
             .program_id
             .ok_or_else(|| CoreError::message(format!("channel `{channel}` has no program_id")))?
             .to_string();
-        let authority = opts
-            .authority
-            .clone()
-            .or_else(|| resolved.upgrade_authority.map(|p| project.resolve_path(p)));
+        let authority = opts.authority.clone().or_else(|| {
+            resolved
+                .upgrade_authority
+                .and_then(|p| authority::declared_keypair(project, p))
+        });
         for (seed, entry) in declared {
             if !opts.seeds.is_empty() && !opts.seeds.contains(seed) {
                 continue;

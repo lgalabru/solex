@@ -214,6 +214,8 @@ program_id = "CHNLxBtX…"
 vars = { treasury_owner = "4zTeC5…" }
 ```
 
+`upgrade_authority` is a keypair file, or the address of an authority whose key is not on this machine (a hardware wallet, a multisig vault). Before uploading anything, `solex deploy` reads the program's authority from the cluster: a declared keypair or address that is not the one on chain stops the deploy, and with nothing declared the chain's authority is used. Signing for an authority without a local keypair is not built yet; the deploy stops and says whose signature is missing.
+
 Because `var!` and `declare_id!` resolve at compile time, a channel with overrides is one artifact per cluster, `target/solex/stable/mainnet/` and `target/solex/stable/devnet/`, each built with `SOLEX_CLUSTER` set; `solex deploy` sends each to its cluster and `--cluster` narrows any command to one. A build that cannot tell which cluster it is for fails rather than guessing. A channel without `program_id` is tag-only: it names a surface for other channels to `include` and is never built.
 
 ## On-chain metadata

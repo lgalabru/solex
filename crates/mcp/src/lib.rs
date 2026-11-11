@@ -296,6 +296,7 @@ impl SolexMcp {
                             "artifact": plan.so_path,
                             "program_keypair": plan.program_keypair,
                             "upgrade_authority": plan.upgrade_authority,
+                            "upgrade_authority_address": plan.authority_address,
                             "command": build::display_command(&plan.command()),
                         })
                     })

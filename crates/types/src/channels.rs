@@ -140,7 +140,8 @@ pub struct Channel {
     /// RPC URL(s) passed to the Solana CLI. A string or a list.
     #[serde(default, skip_serializing_if = "Clusters::is_empty")]
     pub cluster: Clusters,
-    /// Upgrade authority keypair passed to `solana program deploy`.
+    /// Upgrade authority: a keypair file passed to `solana program deploy`,
+    /// or the address of an authority whose key is held elsewhere.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub upgrade_authority: Option<PathBuf>,
     /// Other channels whose tags this channel also ships. A `canary` channel

@@ -6,6 +6,7 @@
 
 use std::path::PathBuf;
 
+pub mod authority;
 pub mod build;
 pub mod deploy;
 pub mod keys;

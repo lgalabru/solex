@@ -3,7 +3,7 @@
 
 use std::{path::PathBuf, process::Command};
 
-use crate::{CoreError, Project, Result, build, keys};
+use crate::{CoreError, Project, Result, authority, build, keys};
 
 #[derive(Debug, Clone, Default)]
 pub struct TerminateOptions {
@@ -101,9 +101,9 @@ pub fn plan(project: &Project, channel: &str, opts: &TerminateOptions) -> Result
         program_id,
         cluster,
         authority: opts.authority.clone().or_else(|| {
-            ch.upgrade_authority
-                .as_ref()
-                .map(|p| project.resolve_path(p))
+            resolved
+                .upgrade_authority
+                .and_then(|p| authority::declared_keypair(project, p))
         }),
         recipient: opts.recipient.clone(),
         buffers: opts.buffers,
