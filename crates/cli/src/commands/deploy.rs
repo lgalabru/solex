@@ -4,9 +4,10 @@ use clap::Args;
 use dialoguer::{MultiSelect, theme::ColorfulTheme};
 use solex_core::{
     CoreError, Result,
-    authority::Signer,
+    authority::{Kind, Signer},
     build,
     deploy::{self, DeployOptions},
+    handoff,
 };
 
 use crate::{
@@ -175,27 +176,13 @@ impl DeployCommand {
                     .frame()
             );
             if let Some(Signer::Remote {
-                address, deployed, ..
+                address,
+                kind,
+                deployed,
             }) = &signer
             {
-                let what = if *deployed {
-                    format!(
-                        "the upgrade authority of {} on {target} is {address}, and its keypair \
-                         is not on this machine",
-                        plan.program_id
-                    )
-                } else {
-                    format!(
-                        "{} is not deployed on {target} yet, and the keypair of its declared \
-                         upgrade authority {address} is not on this machine",
-                        plan.program_id
-                    )
-                };
-                return Err(CoreError::message(format!(
-                    "{what}\n  Nothing was sent. Signing somewhere else is not built yet; to \
-                     sign here, point `upgrade_authority` (or --upgrade-authority) at its \
-                     keypair."
-                )));
+                self.hand_off(&project, &plan, address, kind, *deployed, target)?;
+                continue;
             }
             let sp = style::spinner(&format!("Deploying to {target}..."));
             let r = deploy::deploy(&plan, self.verbose);
@@ -214,6 +201,93 @@ impl DeployCommand {
                 self.upload_metadata(&project, &plan)?;
             }
         }
+        Ok(())
+    }
+
+    /// The authority's key is elsewhere: upload the buffer and leave the one
+    /// transaction it has to sign, as a Vow review file when possible.
+    fn hand_off(
+        &self,
+        project: &solex_core::Project,
+        plan: &deploy::DeployPlan,
+        address: &str,
+        kind: &Kind,
+        deployed: bool,
+        target: &str,
+    ) -> Result<()> {
+        let stop = |what: String, next: &str| {
+            Err(CoreError::message(format!(
+                "{what}\n  Nothing was sent. {next}"
+            )))
+        };
+        if !deployed {
+            return stop(
+                format!(
+                    "{} is not deployed on {target} yet, and the keypair of its declared \
+                     upgrade authority {address} is not on this machine",
+                    plan.program_id
+                ),
+                "A first deploy to an authority held elsewhere is not built yet; deploy with a \
+                 keypair, then hand the authority over.",
+            );
+        }
+        if let Kind::Derived { owner } = kind {
+            return stop(
+                format!(
+                    "the upgrade authority of {} on {target} is {address}, a program-derived \
+                     address{}",
+                    plan.program_id,
+                    owner
+                        .as_ref()
+                        .map(|o| format!(" owned by {o}"))
+                        .unwrap_or_default()
+                ),
+                "Only its program can sign for it; proposing an upgrade through that program \
+                 is not built yet.",
+            );
+        }
+        let out_dir = project.target_out_dir(&plan.channel, plan.cluster.as_deref());
+        let sp = style::spinner(&format!("Uploading the program buffer to {target}..."));
+        let r = handoff::prepare(plan, address, &out_dir, self.verbose);
+        sp.finish_and_clear();
+        let h = r?;
+        let shown = |p: &std::path::Path| {
+            p.strip_prefix(project.root())
+                .unwrap_or(p)
+                .display()
+                .to_string()
+        };
+        let mut lines = vec![
+            format!("buffer       {}", h.buffer),
+            format!("signer       {address}"),
+            format!("transaction  {}", shown(&h.transaction)),
+        ];
+        match (&h.review, &h.review_skipped) {
+            (Some(path), _) => lines.push(format!("review file  {}", shown(path))),
+            (None, Some(why)) => lines.push(format!("review file  none: {why}")),
+            (None, None) => {}
+        }
+        lines.push(String::new());
+        lines.push(
+            "The program is not upgraded until the authority signs this transaction and it is \
+             sent."
+                .to_string(),
+        );
+        lines.push(
+            "It uses a recent blockhash and expires about a minute from now, so for now it is \
+             for review rather than for signing on another device."
+                .to_string(),
+        );
+        lines.push(format!(
+            "To give up and reclaim the buffer's rent: solana program close {} --url {}",
+            h.buffer,
+            solex_core::types::solana_url(target)
+        ));
+        components::print_notice_lines(
+            components::NoticeLevel::Warning,
+            &format!("{} on {target} is waiting for a signature", plan.channel),
+            &lines,
+        );
         Ok(())
     }
 

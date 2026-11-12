@@ -201,6 +201,21 @@ pub fn sign(message: &Message, keypairs: &[&Keypair]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+/// Sign with the keypairs at hand and serialize, leaving an all-zero
+/// signature for every signer that is not among them.
+pub fn sign_partial(message: &Message, keypairs: &[&Keypair]) -> Vec<u8> {
+    let mut out = Vec::new();
+    compact_u16(message.signers.len(), &mut out);
+    for s in &message.signers {
+        match keypairs.iter().find(|k| k.pubkey_bytes() == *s) {
+            Some(kp) => out.extend_from_slice(&kp.sign(&message.bytes)),
+            None => out.extend_from_slice(&[0; 64]),
+        }
+    }
+    out.extend_from_slice(&message.bytes);
+    out
+}
+
 /// Group sequential instructions into as few transactions as fit, keeping
 /// their order. `prefix` (compute budget) is repeated in every transaction.
 pub fn pack(
@@ -432,7 +447,7 @@ impl Rpc {
             .ok_or_else(|| CoreError::message("getMinimumBalanceForRentExemption: not a number"))
     }
 
-    fn latest_blockhash(&self) -> Result<([u8; 32], u64)> {
+    pub fn latest_blockhash(&self) -> Result<([u8; 32], u64)> {
         let v = self.call("getLatestBlockhash", json!([{"commitment": "confirmed"}]))?;
         let hash = pubkey(v["value"]["blockhash"].as_str().unwrap_or_default())?;
         let last = v["value"]["lastValidBlockHeight"].as_u64().unwrap_or(0);

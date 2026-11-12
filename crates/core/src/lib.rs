@@ -9,6 +9,7 @@ use std::path::PathBuf;
 pub mod authority;
 pub mod build;
 pub mod deploy;
+pub mod handoff;
 pub mod keys;
 pub mod metadata;
 pub mod program_metadata;

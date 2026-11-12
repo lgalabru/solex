@@ -53,9 +53,14 @@ address of an authority whose key is not on this machine), `includes`,
 
 Before uploading, `solex deploy` reads the program's upgrade authority from
 the cluster. A declared keypair or address that is not that authority stops
-the deploy; with nothing declared, the chain's authority is used. An
-authority with no keypair here cannot be signed for yet, and the deploy
-stops before sending anything.
+the deploy; with nothing declared, the chain's authority is used. For an
+ordinary-key authority with no keypair here, deploy uploads the buffer with
+the fee payer and writes the transaction the authority must sign to
+`target/solex/<channel>/upgrade.tx`, plus a `.vow` review file when the `vow`
+command is installed (devnet and mainnet). The program is not upgraded until
+that transaction is signed and sent, and it expires with its blockhash, about
+a minute. First deploys and program-derived authorities stop before sending
+anything.
 
 Per-cluster overrides, `[channels.<channel>.<cluster>]`, may set `program_id`,
 `keypair`, `upgrade_authority` and `vars` (merged over the channel's). The
