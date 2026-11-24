@@ -67,8 +67,15 @@ For a Squads multisig, declare the multisig account, never the vault:
 `upgrade_authority = "squads:<multisig>"` (`/<n>` picks another vault). Solex
 derives the vault and checks the multisig on the cluster at every deploy.
 With the vault in control, `solex deploy` uploads a buffer, hands it to the
-vault and prints the buffer and spill addresses to propose in Squads. A first
-deploy uses the local keypair. `solex authority` shows whether the chain
+vault, proposes the upgrade in the multisig, approves it and executes it once
+the threshold is reached, as far as the fee payer's key is allowed to.
+Running the same deploy again (any member's key) continues the same proposal;
+state is in `target/solex/<channel>/upgrade-pending.json`. A non-member stops
+after the buffer and prints the buffer and spill addresses. While a
+local keypair still holds the program (first deploy, or not handed over yet),
+`solex deploy` announces the handover, deploys under that keypair and then
+asks a person at a terminal to confirm it; with `-y` or on mainnet it prints
+the command instead. `solex authority` shows whether the chain
 agrees with the manifest; `solex authority --transfer --vault <address>` hands
 a program held by a local keypair to the declared multisig. It is permanent:
 never run it for the user, show them the command. `--vault` is the vault

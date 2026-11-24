@@ -109,42 +109,64 @@ pub fn status(target: &Target) -> Result<Status> {
         target.declared.as_ref(),
         target.keypair.as_deref(),
     )?;
-    let Signer::Outgoing {
-        path,
-        address,
-        to,
-        kind,
-        deployed,
-    } = signer
-    else {
-        return Ok(Status::Settled(signer));
-    };
-    if !deployed {
+    if let Signer::Outgoing {
+        deployed: false, ..
+    } = &signer
+    {
         return Err(CoreError::message(format!(
             "{} is not deployed on {} yet\n  Deploy it first (`solex deploy`); a vault cannot \
              sign a first deploy, so the program is handed over afterwards.",
             target.program_id, target.cluster
         )));
     }
-    let multisig = verified_multisig(&to, kind)?;
     let reference = match &target.declared {
-        Some(Declared::Squads(r)) => r.clone(),
-        other => unreachable!("only a declared multisig resolves to a vault, got {other:?}"),
+        Some(Declared::Squads(r)) => Some(r),
+        _ => None,
     };
-    assert_eq!(solana::b58(&reference.vault()?), to);
-    let from = solana::pubkey(&address)?;
+    Ok(
+        match pending(&target.program_id, &target.cluster, reference, &signer)? {
+            Some(handover) => Status::Pending(Box::new(handover)),
+            None => Status::Settled(signer),
+        },
+    )
+}
+
+/// The handover `signer` still owes, checked: `None` when the authority is
+/// where the manifest says. A deploy calls this before uploading anything,
+/// so a destination that would be refused is refused first.
+pub fn pending(
+    program_id: &str,
+    cluster: &str,
+    reference: Option<&squads::Reference>,
+    signer: &Signer,
+) -> Result<Option<Handover>> {
+    let Signer::Outgoing {
+        path,
+        address,
+        to,
+        kind,
+        ..
+    } = signer
+    else {
+        return Ok(None);
+    };
+    let multisig = verified_multisig(to, kind.clone())?;
+    let reference =
+        reference.unwrap_or_else(|| unreachable!("only a declared multisig resolves to a vault"));
+    assert_eq!(solana::b58(&reference.vault()?), *to);
+    let from = solana::pubkey(address)?;
     let warnings = warnings(&multisig, &from);
-    Ok(Status::Pending(Box::new(Handover {
-        program_id: target.program_id.clone(),
-        is_mainnet: solex_types::solana_url(&target.cluster) == "mainnet-beta",
-        cluster: target.cluster.clone(),
-        from_path: path,
-        from: address,
-        reference,
+    Ok(Some(Handover {
+        program_id: program_id.to_string(),
+        is_mainnet: solex_types::solana_url(cluster) == "mainnet-beta",
+        cluster: cluster.to_string(),
+        from_path: path.clone(),
+        from: address.clone(),
+        reference: reference.clone(),
         multisig,
-        vault: to,
+        vault: to.clone(),
         warnings,
-    })))
+    }))
 }
 
 /// Only a vault whose multisig was read from this cluster is a destination.
@@ -286,6 +308,7 @@ mod tests {
             threshold,
             time_lock_s: 0,
             config_authority: None,
+            transaction_index: 0,
             members: members
                 .iter()
                 .map(|(key, permissions)| squads::Member {

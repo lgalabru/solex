@@ -136,48 +136,77 @@ impl AuthorityCommand {
                 target.channel
             )));
         }
-        let vault = self.confirmed_vault(handover)?;
-        let sp = style::spinner("Handing the upgrade authority over...");
-        let r = handover::execute(handover, &vault);
-        sp.finish_and_clear();
-        let signature = r?;
-        components::print_notice_lines(
-            NoticeLevel::Success,
-            &format!(
-                "{} on {} is now controlled by the multisig",
-                target.channel, target.cluster
-            ),
-            &[
-                format!("authority    {}", handover.vault),
-                format!("transaction  {signature}"),
-                String::new(),
-                "`solex deploy` now uploads each upgrade to a buffer and hands it to the vault \
-                 for the multisig to approve."
-                    .to_string(),
-            ],
-        );
-        Ok(())
+        let vault = match &self.vault {
+            Some(vault) => vault.clone(),
+            None if std::io::stdin().is_terminal() => match ask_vault(handover)? {
+                Some(vault) => vault,
+                None => {
+                    components::print_notice(NoticeLevel::Warning, "Nothing sent", &rerun);
+                    return Ok(());
+                }
+            },
+            None => {
+                return Err(CoreError::message(
+                    "pass --vault <address>: the vault as the Squads app shows it, to confirm \
+                     the handover",
+                ));
+            }
+        };
+        transfer(&target.channel, handover, &vault)
     }
+}
 
-    /// The vault address from somewhere other than the manifest. Typing it
-    /// is the confirmation: a wrong multisig in the manifest derives another
-    /// vault and stops here.
-    fn confirmed_vault(&self, handover: &Handover) -> Result<String> {
-        if let Some(vault) = &self.vault {
-            return Ok(vault.clone());
-        }
-        if !std::io::stdin().is_terminal() {
-            return Err(CoreError::message(
-                "pass --vault <address>: the vault as the Squads app shows it, to confirm the \
-                 handover",
-            ));
-        }
-        Input::<String>::with_theme(&ColorfulTheme::default())
-            .with_prompt(format!(
-                "Paste the vault address of multisig {} from the Squads app",
-                components::short(&handover.reference.multisig)
-            ))
-            .interact_text()
-            .map_err(|e| CoreError::message(format!("prompt failed: {e}")))
-    }
+/// What a handover does, for the notice a deploy prints before it starts.
+pub fn summary(handover: &Handover) -> Vec<String> {
+    let mut lines = vec![
+        format!("from      {}", handover.from),
+        format!("to        {}", handover.vault),
+        format!(
+            "multisig  {}, {} to approve",
+            solana::b58(&handover.multisig.address),
+            handover.multisig.describe()
+        ),
+    ];
+    lines.extend(handover.warnings.iter().cloned());
+    lines
+}
+
+/// Ask for the vault address from somewhere other than the manifest. Typing
+/// it is the confirmation: a wrong multisig in the manifest derives another
+/// vault and the handover stops. An empty answer declines.
+pub fn ask_vault(handover: &Handover) -> Result<Option<String>> {
+    let answer = Input::<String>::with_theme(&ColorfulTheme::default())
+        .with_prompt(format!(
+            "Hand {} over to the multisig? This is permanent. Paste its vault address from \
+             the Squads app to confirm (enter to skip)",
+            components::short(&handover.program_id)
+        ))
+        .allow_empty(true)
+        .interact_text()
+        .map_err(|e| CoreError::message(format!("prompt failed: {e}")))?;
+    Ok(Some(answer.trim().to_string()).filter(|a| !a.is_empty()))
+}
+
+/// Send the handover and say what changed.
+pub fn transfer(channel: &str, handover: &Handover, vault: &str) -> Result<()> {
+    let sp = style::spinner("Handing the upgrade authority over...");
+    let r = handover::execute(handover, vault);
+    sp.finish_and_clear();
+    let signature = r?;
+    components::print_notice_lines(
+        NoticeLevel::Success,
+        &format!(
+            "{channel} on {} is now controlled by the multisig",
+            handover.cluster
+        ),
+        &[
+            format!("authority    {}", handover.vault),
+            format!("transaction  {signature}"),
+            String::new(),
+            "`solex deploy` now takes each upgrade through the multisig: it uploads a buffer, \
+             proposes the upgrade, and executes it once enough members approved."
+                .to_string(),
+        ],
+    );
+    Ok(())
 }

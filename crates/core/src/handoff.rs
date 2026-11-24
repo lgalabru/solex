@@ -29,9 +29,12 @@ use crate::{
 /// The buffer's keypair, kept in the build directory so an interrupted
 /// upload resumes at the same address.
 const BUFFER_KEYPAIR: &str = "upgrade-buffer.json";
+/// The loader extends a program by at least this much at a time
+/// (`MINIMUM_EXTEND_PROGRAM_BYTES`), or to its maximum size.
+const EXTEND_BYTES_MIN: usize = 10_240;
 const CLOCK_SYSVAR: &str = "SysvarC1ock11111111111111111111111111111111";
 /// ProgramData header: u32 tag, u64 slot, Option<Pubkey> authority.
-const PROGRAM_DATA_HEADER: usize = 45;
+pub(crate) const PROGRAM_DATA_HEADER: usize = 45;
 
 /// What was prepared for the authority to sign.
 #[derive(Debug, Clone)]
@@ -70,25 +73,35 @@ pub fn upgrade_instructions(
             AccountMeta::readonly(*authority, false),
         ],
     )?;
-    let upgrade = loader_ix(
+    let upgrade = upgrade_instruction(program, buffer, payer, authority)?;
+    Ok(vec![set_buffer_authority, upgrade])
+}
+
+/// `Upgrade` from a buffer `authority` controls. `spill` gets the buffer's
+/// rent back: whoever paid for it.
+pub fn upgrade_instruction(
+    program: &Pubkey,
+    buffer: &Pubkey,
+    spill: &Pubkey,
+    authority: &Pubkey,
+) -> Result<Instruction> {
+    loader_ix(
         3,
         vec![
             AccountMeta::writable(program_metadata::program_data_address(program)?, false),
             AccountMeta::writable(*program, false),
             AccountMeta::writable(*buffer, false),
-            // Spill: the buffer's rent goes back to whoever paid for it.
-            AccountMeta::writable(*payer, false),
+            AccountMeta::writable(*spill, false),
             AccountMeta::readonly(solana::pubkey(solana::RENT_SYSVAR)?, false),
             AccountMeta::readonly(solana::pubkey(CLOCK_SYSVAR)?, false),
             AccountMeta::readonly(*authority, true),
         ],
-    )?;
-    Ok(vec![set_buffer_authority, upgrade])
+    )
 }
 
 /// Where the payer keypair for the buffer comes from: `--keypair`, else the
 /// Solana CLI's.
-fn payer_path(plan: &DeployPlan) -> Result<PathBuf> {
+pub(crate) fn payer_path(plan: &DeployPlan) -> Result<PathBuf> {
     plan.payer
         .clone()
         .or_else(metadata::solana_cli_keypair)
@@ -96,9 +109,8 @@ fn payer_path(plan: &DeployPlan) -> Result<PathBuf> {
         .ok_or_else(|| CoreError::message("no fee payer keypair; pass --keypair"))
 }
 
-/// The Solana CLI refuses an upgrade that does not fit; say so before paying
-/// for a buffer.
-fn check_fits(rpc: &Rpc, plan: &DeployPlan, program: &Pubkey) -> Result<()> {
+/// Size of the artifact and the room the program account has for it.
+fn sizes(rpc: &Rpc, plan: &DeployPlan, program: &Pubkey) -> Result<(usize, usize)> {
     let len = std::fs::metadata(&plan.so_path)
         .map(|m| m.len() as usize)
         .map_err(|source| CoreError::Io {
@@ -110,6 +122,13 @@ fn check_fits(rpc: &Rpc, plan: &DeployPlan, program: &Pubkey) -> Result<()> {
         .account(&program_metadata::program_data_address(program)?)?
         .map(|a| a.data.len().saturating_sub(PROGRAM_DATA_HEADER))
         .unwrap_or(0);
+    Ok((len, capacity))
+}
+
+/// The Solana CLI refuses an upgrade that does not fit; say so before paying
+/// for a buffer.
+fn check_fits(rpc: &Rpc, plan: &DeployPlan, program: &Pubkey) -> Result<()> {
+    let (len, capacity) = sizes(rpc, plan, program)?;
     if len > capacity {
         return Err(CoreError::message(format!(
             "{} is {len} bytes but {} has room for {capacity}\n  Nothing was sent. Extend the \
@@ -117,10 +136,42 @@ fn check_fits(rpc: &Rpc, plan: &DeployPlan, program: &Pubkey) -> Result<()> {
             plan.so_path.display(),
             plan.program_id,
             plan.program_id,
-            len - capacity
+            (len - capacity).max(EXTEND_BYTES_MIN)
         )));
     }
     Ok(())
+}
+
+/// Grow the program account until the artifact fits, paid by `payer`.
+/// Extending needs no authority, which is why this can run ahead of a
+/// multisig upgrade. Returns the bytes added.
+fn extend_to_fit(
+    rpc: &Rpc,
+    plan: &DeployPlan,
+    program: &Pubkey,
+    payer: &Path,
+    verbose: bool,
+) -> Result<usize> {
+    let (len, capacity) = sizes(rpc, plan, program)?;
+    if len <= capacity {
+        return Ok(0);
+    }
+    let bytes = (len - capacity).max(EXTEND_BYTES_MIN);
+    let mut cmd = Command::new("solana");
+    cmd.args(["program", "extend", &plan.program_id, &bytes.to_string()]);
+    if let Some(url) = &plan.cluster {
+        cmd.args(["--url", solex_types::solana_url(url)]);
+    }
+    cmd.arg("--keypair").arg(payer);
+    build::run(&mut cmd, "solana program extend", verbose)?;
+    let (_, capacity) = sizes(rpc, plan, program)?;
+    if len > capacity {
+        return Err(CoreError::message(format!(
+            "{} was extended by {bytes} bytes but still has room for {capacity} of {len}",
+            plan.program_id
+        )));
+    }
+    Ok(bytes)
 }
 
 /// `solana program write-buffer` into a buffer whose keypair is kept in
@@ -144,7 +195,7 @@ fn write_buffer(plan: &DeployPlan, payer: &Path, out_dir: &Path, verbose: bool) 
 }
 
 /// The authority of a buffer account: u32 tag (1), then Option<Pubkey>.
-fn buffer_authority(rpc: &Rpc, buffer: &Pubkey) -> Result<Option<Pubkey>> {
+pub(crate) fn buffer_authority(rpc: &Rpc, buffer: &Pubkey) -> Result<Option<Pubkey>> {
     let Some(account) = rpc.account(buffer)? else {
         return Ok(None);
     };
@@ -166,6 +217,8 @@ pub struct VaultHandoff {
     pub payer: String,
     pub vault: String,
     pub signature: String,
+    /// Bytes the program account was grown by so the build fits; 0 if none.
+    pub extended_bytes: usize,
 }
 
 /// Upload the buffer and hand it to `vault`, the program's upgrade
@@ -187,7 +240,7 @@ pub fn prepare_for_vault(
     let payer = Keypair::read(&payer_path)?;
     let payer_key = payer.pubkey_bytes();
     assert!(payer_key != vault_key, "a vault has no keypair to pay with");
-    check_fits(&rpc, plan, &program)?;
+    let extended_bytes = extend_to_fit(&rpc, plan, &program, &payer_path, verbose)?;
 
     // A buffer kept from an earlier run that already went to a vault cannot
     // be written to again; start a new one.
@@ -221,6 +274,7 @@ pub fn prepare_for_vault(
         payer: payer.pubkey(),
         vault: vault.to_string(),
         signature,
+        extended_bytes,
     })
 }
 

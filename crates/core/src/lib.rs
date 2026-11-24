@@ -13,6 +13,7 @@ pub mod handoff;
 pub mod handover;
 pub mod keys;
 pub mod metadata;
+pub mod multisig_upgrade;
 pub mod program_metadata;
 pub mod project;
 pub mod scaffold;

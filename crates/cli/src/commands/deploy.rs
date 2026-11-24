@@ -8,6 +8,8 @@ use solex_core::{
     build,
     deploy::{self, DeployOptions},
     handoff,
+    handover::{self, Handover},
+    multisig_upgrade::{self, Blocker, Outcome},
 };
 
 use crate::{
@@ -94,6 +96,101 @@ fn pick_targets(plans: Vec<deploy::DeployPlan>) -> Result<Vec<deploy::DeployPlan
         .filter(|(i, _)| picked.contains(i))
         .map(|(_, p)| p)
         .collect())
+}
+
+/// Title and closing lines for where an upgrade through a multisig stands.
+fn describe_outcome(
+    report: &multisig_upgrade::Report,
+    channel: &str,
+    target: &str,
+    lines: &mut Vec<String>,
+) -> (components::NoticeLevel, String) {
+    let waiting = components::NoticeLevel::Warning;
+    match &report.outcome {
+        Outcome::Upgraded {
+            transaction_index,
+            signature,
+        } => {
+            lines.push(format!("proposal  {transaction_index}, executed"));
+            if let Some(signature) = signature {
+                lines.push(format!("transaction  {signature}"));
+            }
+            (
+                components::NoticeLevel::Success,
+                format!("Deployed {channel} to {target} through the multisig"),
+            )
+        }
+        Outcome::Waiting {
+            transaction_index,
+            approvals,
+            threshold,
+            blocker,
+        } => {
+            lines.push(format!(
+                "proposal  {transaction_index}, {approvals} of {threshold} approvals"
+            ));
+            lines.push(String::new());
+            lines.push(match blocker {
+                Blocker::Approvals => "Other members approve it in Squads, or by running this \
+                    same deploy of the same build with their key. Run it again afterwards to \
+                    execute."
+                    .to_string(),
+                Blocker::TimeLock { left_s } => format!(
+                    "Approved. The multisig's time lock releases it in {left_s} seconds; run \
+                     this deploy again then."
+                ),
+                Blocker::CannotExecute => format!(
+                    "Approved, but {} may not execute: a member with that permission has to.",
+                    report.member
+                ),
+                Blocker::Draft => "The proposal is a draft; a member has to activate it in \
+                    Squads."
+                    .to_string(),
+            });
+            (
+                waiting,
+                format!("{channel} on {target} is waiting for the multisig"),
+            )
+        }
+        Outcome::NeedsMember => {
+            lines.push(String::new());
+            lines.push(format!(
+                "{} cannot propose to this multisig. A member proposes a program upgrade in \
+                 Squads with the buffer and spill addresses above, or runs this deploy of the \
+                 same build with their key.",
+                report.member
+            ));
+            lines.push(
+                "The buffer belongs to the vault: only the multisig can use or close it."
+                    .to_string(),
+            );
+            (
+                waiting,
+                format!("{channel} on {target} is waiting for a member to propose"),
+            )
+        }
+        Outcome::UpToDate => {
+            lines.push(String::new());
+            lines
+                .push("The program on the cluster already is this build. Nothing was sent.".into());
+            (
+                components::NoticeLevel::Success,
+                format!("{channel} on {target} is up to date"),
+            )
+        }
+        Outcome::BufferGone => {
+            lines.push(String::new());
+            lines.push(
+                "The buffer of the earlier run no longer exists: the multisig used it or closed \
+                 it. Nothing was sent. Run the deploy again to start over from a new buffer."
+                    .to_string(),
+            );
+            (
+                waiting,
+                format!("{channel} on {target}: nothing to continue"),
+            )
+        }
+    }
 }
 
 /// The command that hands this plan's program over to its declared multisig.
@@ -205,26 +302,33 @@ impl DeployCommand {
                     self.hand_off(&project, &plan, address, kind, *deployed, target)?;
                     continue;
                 }
-                Some(Signer::Outgoing {
-                    address,
-                    to,
-                    deployed: true,
-                    ..
-                }) => {
-                    return Err(CoreError::message(format!(
-                        "the manifest declares upgrade authority {to}, but {} on {target} is \
-                         still controlled by {address}\n  Nothing was sent. Hand it over first: \
-                         {}",
-                        plan.program_id,
-                        authority_command(&plan)
-                    )));
-                }
-                // A first deploy under the local key, handed over afterwards.
-                Some(Signer::Outgoing {
-                    deployed: false, ..
-                })
-                | Some(Signer::Local { .. })
-                | None => {}
+                // Still under the local key: it deploys, then hands over.
+                Some(Signer::Outgoing { .. }) | Some(Signer::Local { .. }) | None => {}
+            }
+            // Checked before anything is uploaded: a destination that would
+            // be refused after the deploy is refused now.
+            let pending = match (&signer, cluster) {
+                (Some(signer), Some(cluster)) => handover::pending(
+                    &plan.program_id,
+                    cluster,
+                    plan.authority_multisig.as_ref(),
+                    signer,
+                )?,
+                _ => None,
+            };
+            if let Some(handover) = &pending {
+                let mut lines = commands::authority::summary(handover);
+                lines.push(String::new());
+                lines.push(
+                    "This deploy is signed by the key that holds the authority today. Once it \
+                     is done, solex asks before handing the program over."
+                        .to_string(),
+                );
+                components::print_notice_lines(
+                    components::NoticeLevel::Warning,
+                    "The manifest hands this program to a multisig",
+                    &lines,
+                );
             }
             let sp = style::spinner(&format!("Deploying to {target}..."));
             let r = deploy::deploy(&plan, self.verbose);
@@ -242,24 +346,44 @@ impl DeployCommand {
             if self.metadata {
                 self.upload_metadata(&project, &plan)?;
             }
-            if let Some(Signer::Outgoing { address, to, .. }) = &signer {
-                components::print_notice_lines(
-                    components::NoticeLevel::Warning,
-                    "The upgrade authority is not handed over yet",
-                    &[
-                        format!("on chain  {address}"),
-                        format!("declared  {to}"),
-                        String::new(),
-                        format!("Hand it over: {}", authority_command(&plan)),
-                    ],
-                );
+            if let Some(handover) = &pending {
+                self.offer_handover(&plan, handover)?;
             }
         }
         Ok(())
     }
 
-    /// The authority is a multisig vault: upload the buffer, hand it to the
-    /// vault, and say what the multisig has to approve.
+    /// After a deploy under the local key: ask whether to hand the program
+    /// to the declared multisig now. Only a person at a terminal is asked;
+    /// scripts and mainnet get the command instead.
+    fn offer_handover(&self, plan: &deploy::DeployPlan, handover: &Handover) -> Result<()> {
+        let can_ask = !self.yes && !handover.is_mainnet && std::io::stdin().is_terminal();
+        let vault = match can_ask {
+            true => commands::authority::ask_vault(handover)?,
+            false => None,
+        };
+        if let Some(vault) = vault {
+            return commands::authority::transfer(&plan.channel, handover, &vault);
+        }
+        let mut command = authority_command(plan);
+        if handover.is_mainnet {
+            command.push_str(" --allow-mainnet");
+        }
+        components::print_notice_lines(
+            components::NoticeLevel::Warning,
+            "The upgrade authority is not handed over yet",
+            &[
+                format!("on chain  {}", handover.from),
+                format!("declared  {}", handover.vault),
+                String::new(),
+                format!("Hand it over: {command}"),
+            ],
+        );
+        Ok(())
+    }
+
+    /// The authority is a multisig vault: take the upgrade through the
+    /// multisig as far as this key can, and say what is left.
     fn hand_off_to_vault(
         &self,
         project: &solex_core::Project,
@@ -268,33 +392,38 @@ impl DeployCommand {
         multisig: &solex_core::squads::Multisig,
         target: &str,
     ) -> Result<()> {
+        let reference = plan
+            .authority_multisig
+            .as_ref()
+            .unwrap_or_else(|| unreachable!("a vault authority comes from a declared multisig"));
         let out_dir = project.target_out_dir(&plan.channel, plan.cluster.as_deref());
-        let sp = style::spinner(&format!("Uploading the program buffer to {target}..."));
-        let r = handoff::prepare_for_vault(plan, vault, &out_dir, self.verbose);
+        let sp = style::spinner(&format!(
+            "Taking the upgrade through the multisig on {target}..."
+        ));
+        let r = multisig_upgrade::advance(plan, reference, vault, &out_dir, self.verbose);
         sp.finish_and_clear();
-        let h = r?;
-        components::print_notice_lines(
-            components::NoticeLevel::Warning,
-            &format!(
-                "{} on {target} is waiting for the multisig ({})",
-                plan.channel,
-                multisig.describe()
-            ),
-            &[
-                format!("program  {}", plan.program_id),
-                format!("buffer   {}", h.buffer),
-                format!("spill    {}", h.payer),
-                format!("vault    {}", h.vault),
-                String::new(),
-                "The program is not upgraded until the multisig approves and executes an \
-                 upgrade from this buffer. Propose it in Squads as a program upgrade with the \
-                 buffer and spill addresses above; the spill address gets the buffer's rent \
-                 back."
-                    .to_string(),
-                "The buffer now belongs to the vault: only the multisig can use or close it."
-                    .to_string(),
-            ],
-        );
+        let report = r?;
+        let mut lines = vec![
+            format!("program   {}", plan.program_id),
+            format!("multisig  {} ({})", reference.multisig, multisig.describe()),
+            format!("vault     {vault}"),
+        ];
+        if !matches!(report.outcome, Outcome::Upgraded { .. } | Outcome::UpToDate) {
+            let origin = match report.uploaded {
+                true => "uploaded now",
+                false => "from an earlier run of this build",
+            };
+            lines.push(format!("buffer    {} ({origin})", report.buffer));
+            lines.push(format!("spill     {}", report.spill));
+        }
+        if report.extended_bytes > 0 {
+            lines.push(format!(
+                "extended  the program account by {} bytes so the build fits",
+                report.extended_bytes
+            ));
+        }
+        let (level, title) = describe_outcome(&report, &plan.channel, target, &mut lines);
+        components::print_notice_lines(level, &title, &lines);
         Ok(())
     }
 

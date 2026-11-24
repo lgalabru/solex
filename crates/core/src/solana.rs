@@ -114,10 +114,24 @@ pub struct Message {
     pub signers: Vec<Pubkey>,
 }
 
-/// Compile a legacy message: the fee payer first, then writable signers,
-/// readonly signers, writable and readonly non-signers, each group in order of
-/// first appearance.
-pub fn compile(payer: &Pubkey, ixs: &[Instruction], blockhash: &[u8; 32]) -> Message {
+/// The accounts of a set of instructions in message order: the fee payer
+/// first, then writable signers, readonly signers, writable and readonly
+/// non-signers, each group in order of first appearance.
+pub struct KeyOrder {
+    pub keys: Vec<Pubkey>,
+    pub signers: usize,
+    pub readonly_signers: usize,
+    pub readonly_non_signers: usize,
+}
+
+impl KeyOrder {
+    pub fn index_of(&self, key: &Pubkey) -> u8 {
+        let at = self.keys.iter().position(|k| k == key);
+        at.expect("every instruction account is in the order") as u8
+    }
+}
+
+pub fn order_keys(payer: &Pubkey, ixs: &[Instruction]) -> KeyOrder {
     let mut order: Vec<Pubkey> = vec![*payer];
     let mut flags: HashMap<Pubkey, (bool, bool)> = HashMap::from([(*payer, (true, true))]);
     let mut add = |k: Pubkey, signer: bool, writable: bool| {
@@ -147,34 +161,42 @@ pub fn compile(payer: &Pubkey, ixs: &[Instruction], blockhash: &[u8; 32]) -> Mes
     };
     let mut keys = order.clone();
     keys.sort_by_key(group); // stable: first appearance within a group
-    let num_signers = keys.iter().filter(|k| flags[*k].0).count();
-    let ro_signed = keys.iter().filter(|k| flags[*k] == (true, false)).count();
-    let ro_unsigned = keys.iter().filter(|k| flags[*k] == (false, false)).count();
-    let index: HashMap<Pubkey, u8> = keys
-        .iter()
-        .enumerate()
-        .map(|(i, k)| (*k, i as u8))
-        .collect();
+    // A message indexes its accounts with one byte.
+    assert!(keys.len() <= 256, "more accounts than a message can index");
+    KeyOrder {
+        signers: keys.iter().filter(|k| flags[*k].0).count(),
+        readonly_signers: keys.iter().filter(|k| flags[*k] == (true, false)).count(),
+        readonly_non_signers: keys.iter().filter(|k| flags[*k] == (false, false)).count(),
+        keys,
+    }
+}
 
-    let mut out = vec![num_signers as u8, ro_signed as u8, ro_unsigned as u8];
-    compact_u16(keys.len(), &mut out);
-    for k in &keys {
+/// Compile a legacy message.
+pub fn compile(payer: &Pubkey, ixs: &[Instruction], blockhash: &[u8; 32]) -> Message {
+    let order = order_keys(payer, ixs);
+    let mut out = vec![
+        order.signers as u8,
+        order.readonly_signers as u8,
+        order.readonly_non_signers as u8,
+    ];
+    compact_u16(order.keys.len(), &mut out);
+    for k in &order.keys {
         out.extend_from_slice(k);
     }
     out.extend_from_slice(blockhash);
     compact_u16(ixs.len(), &mut out);
     for ix in ixs {
-        out.push(index[&ix.program_id]);
+        out.push(order.index_of(&ix.program_id));
         compact_u16(ix.accounts.len(), &mut out);
         for a in &ix.accounts {
-            out.push(index[&a.pubkey]);
+            out.push(order.index_of(&a.pubkey));
         }
         compact_u16(ix.data.len(), &mut out);
         out.extend_from_slice(&ix.data);
     }
     Message {
         bytes: out,
-        signers: keys[..num_signers].to_vec(),
+        signers: order.keys[..order.signers].to_vec(),
     }
 }
 
