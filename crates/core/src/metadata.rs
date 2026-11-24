@@ -198,11 +198,11 @@ pub fn plans(
             .program_id
             .ok_or_else(|| CoreError::message(format!("channel `{channel}` has no program_id")))?
             .to_string();
-        let authority = opts.authority.clone().or_else(|| {
-            resolved
-                .upgrade_authority
-                .and_then(|p| authority::declared_keypair(project, p))
-        });
+        let authority = match (&opts.authority, resolved.upgrade_authority) {
+            (Some(p), _) => Some(p.clone()),
+            (None, Some(p)) => authority::declared_keypair(project, p)?,
+            (None, None) => None,
+        };
         for (seed, entry) in declared {
             if !opts.seeds.is_empty() && !opts.seeds.contains(seed) {
                 continue;

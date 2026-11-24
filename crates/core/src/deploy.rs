@@ -11,7 +11,8 @@ use crate::{
     CoreError, Project, Result,
     authority::{self, Declared, Signer},
     build, keys, metadata,
-    solana::Rpc,
+    solana::{self, Rpc},
+    squads,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -41,9 +42,12 @@ pub struct DeployPlan {
     pub program_keypair: Option<PathBuf>,
     /// Upgrade authority keypair passed to the Solana CLI.
     pub upgrade_authority: Option<PathBuf>,
-    /// Upgrade authority declared as an address: its key is not on this
-    /// machine, so [`DeployPlan::command`] cannot sign for it.
+    /// Upgrade authority declared as an address or a multisig (then this is
+    /// its vault): its key is not on this machine, so
+    /// [`DeployPlan::command`] cannot sign for it.
     pub authority_address: Option<String>,
+    /// The multisig `authority_address` is the vault of, when one is declared.
+    pub authority_multisig: Option<squads::Reference>,
     pub payer: Option<PathBuf>,
     pub extra_args: Vec<String>,
 }
@@ -155,12 +159,14 @@ fn plan_for(
         Some(p) => Some(Declared::Keypair(p.clone())),
         None => resolved
             .upgrade_authority
-            .map(|p| authority::declared(project, p)),
+            .map(|p| authority::declared(project, p))
+            .transpose()?,
     };
-    let (upgrade_authority, authority_address) = match declared {
-        Some(Declared::Keypair(p)) => (Some(p), None),
-        Some(Declared::Address(a)) => (None, Some(a)),
-        None => (None, None),
+    let (upgrade_authority, authority_address, authority_multisig) = match declared {
+        Some(Declared::Keypair(p)) => (Some(p), None, None),
+        Some(Declared::Address(a)) => (None, Some(a), None),
+        Some(Declared::Squads(r)) => (None, Some(solana::b58(&r.vault()?)), Some(r)),
+        None => (None, None, None),
     };
 
     Ok(DeployPlan {
@@ -171,6 +177,7 @@ fn plan_for(
         program_keypair,
         upgrade_authority,
         authority_address,
+        authority_multisig,
         payer: opts.payer.clone(),
         extra_args: opts.extra_args.clone(),
     })
@@ -184,10 +191,15 @@ pub fn signer(plan: &DeployPlan) -> Result<Option<Signer>> {
     let Some(cluster) = &plan.cluster else {
         return Ok(None);
     };
-    let declared = match (&plan.authority_address, &plan.upgrade_authority) {
-        (Some(a), _) => Some(Declared::Address(a.clone())),
-        (None, Some(p)) => Some(Declared::Keypair(p.clone())),
-        (None, None) => None,
+    let declared = match (
+        &plan.authority_multisig,
+        &plan.authority_address,
+        &plan.upgrade_authority,
+    ) {
+        (Some(r), _, _) => Some(Declared::Squads(r.clone())),
+        (None, Some(a), _) => Some(Declared::Address(a.clone())),
+        (None, None, Some(p)) => Some(Declared::Keypair(p.clone())),
+        (None, None, None) => None,
     };
     let local = plan.payer.clone().or_else(metadata::solana_cli_keypair);
     let rpc = Rpc::new(&metadata::rpc_url(cluster)).impatient();

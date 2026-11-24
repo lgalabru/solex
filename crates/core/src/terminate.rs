@@ -100,11 +100,11 @@ pub fn plan(project: &Project, channel: &str, opts: &TerminateOptions) -> Result
         channel: channel.to_string(),
         program_id,
         cluster,
-        authority: opts.authority.clone().or_else(|| {
-            resolved
-                .upgrade_authority
-                .and_then(|p| authority::declared_keypair(project, p))
-        }),
+        authority: match (&opts.authority, resolved.upgrade_authority) {
+            (Some(p), _) => Some(p.clone()),
+            (None, Some(p)) => authority::declared_keypair(project, p)?,
+            (None, None) => None,
+        },
         recipient: opts.recipient.clone(),
         buffers: opts.buffers,
         is_mainnet,

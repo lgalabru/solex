@@ -34,6 +34,8 @@ enum Command {
     Deploy(commands::deploy::DeployCommand),
     /// Upload a channel's program metadata (IDL, ...) declared under [metadata.<seed>]
     Metadata(commands::metadata::MetadataCommand),
+    /// Check a channel's upgrade authority, or hand it over to the declared multisig
+    Authority(commands::authority::AuthorityCommand),
     /// Terminate a channel: close its program or buffers and reclaim rent
     Terminate(commands::terminate::TerminateCommand),
     /// Print the environment that selects a channel, for other build pipelines
@@ -94,6 +96,7 @@ fn main() {
         Command::Build(cmd) => cmd.execute(),
         Command::Deploy(cmd) => cmd.execute(),
         Command::Metadata(cmd) => cmd.execute(),
+        Command::Authority(cmd) => cmd.execute(),
         Command::Terminate(cmd) => cmd.execute(),
         Command::Env(cmd) => cmd.execute(),
         Command::Exec(cmd) => cmd.execute(),

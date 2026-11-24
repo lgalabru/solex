@@ -1,3 +1,4 @@
+pub mod authority;
 pub mod build;
 pub mod channel;
 pub mod channels;

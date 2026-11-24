@@ -1,10 +1,15 @@
 //! An upgrade whose authority has no keypair on this machine: upload the
-//! program to a buffer with the fee payer, then write the one transaction
-//! the authority has to sign, as a Vow review file when `vow` is installed.
+//! program to a buffer with the fee payer, then leave what the authority
+//! needs to finish it.
 //!
-//! The buffer stays under the fee payer's authority until that transaction
-//! runs, so it can be closed and its rent reclaimed if the signature never
-//! comes.
+//! For an ordinary key that is the one transaction it has to sign, as a Vow
+//! review file when `vow` is installed. The buffer stays under the fee
+//! payer's authority until that transaction runs, so it can be closed and
+//! its rent reclaimed if the signature never comes.
+//!
+//! For a multisig vault the buffer itself is handed to the vault, because
+//! the loader only upgrades from a buffer the upgrade authority controls.
+//! From then on only the multisig can use or close it.
 
 use std::{
     path::{Path, PathBuf},
@@ -21,6 +26,9 @@ use crate::{
     solana::{self, AccountMeta, Instruction, Pubkey, Rpc},
 };
 
+/// The buffer's keypair, kept in the build directory so an interrupted
+/// upload resumes at the same address.
+const BUFFER_KEYPAIR: &str = "upgrade-buffer.json";
 const CLOCK_SYSVAR: &str = "SysvarC1ock11111111111111111111111111111111";
 /// ProgramData header: u32 tag, u64 slot, Option<Pubkey> authority.
 const PROGRAM_DATA_HEADER: usize = 45;
@@ -38,7 +46,7 @@ pub struct Handoff {
     pub review_skipped: Option<String>,
 }
 
-fn loader_ix(tag: u32, accounts: Vec<AccountMeta>) -> Result<Instruction> {
+pub(crate) fn loader_ix(tag: u32, accounts: Vec<AccountMeta>) -> Result<Instruction> {
     Ok(Instruction {
         program_id: solana::pubkey(solana::LOADER_V3)?,
         accounts,
@@ -118,7 +126,7 @@ fn check_fits(rpc: &Rpc, plan: &DeployPlan, program: &Pubkey) -> Result<()> {
 /// `solana program write-buffer` into a buffer whose keypair is kept in
 /// `out_dir`, so an interrupted upload resumes at the same address.
 fn write_buffer(plan: &DeployPlan, payer: &Path, out_dir: &Path, verbose: bool) -> Result<Pubkey> {
-    let keypair = out_dir.join("upgrade-buffer.json");
+    let keypair = out_dir.join(BUFFER_KEYPAIR);
     if !keypair.is_file() {
         Keypair::generate().write(&keypair)?;
     }
@@ -133,6 +141,95 @@ fn write_buffer(plan: &DeployPlan, payer: &Path, out_dir: &Path, verbose: bool) 
     cmd.args(&plan.extra_args);
     build::run(&mut cmd, "solana program write-buffer", verbose)?;
     solana::pubkey(&keys::pubkey_of(&keypair)?)
+}
+
+/// The authority of a buffer account: u32 tag (1), then Option<Pubkey>.
+fn buffer_authority(rpc: &Rpc, buffer: &Pubkey) -> Result<Option<Pubkey>> {
+    let Some(account) = rpc.account(buffer)? else {
+        return Ok(None);
+    };
+    let data = &account.data;
+    if data.len() < 37 || data[..4] != 1u32.to_le_bytes() {
+        return Err(CoreError::message(format!(
+            "{} is not a program buffer",
+            solana::b58(buffer)
+        )));
+    }
+    Ok((data[4] == 1).then(|| data[5..37].try_into().expect("32 bytes")))
+}
+
+/// A buffer handed to a vault, waiting for the multisig to upgrade from it.
+#[derive(Debug, Clone)]
+pub struct VaultHandoff {
+    pub buffer: String,
+    /// Paid for the buffer; the upgrade should return its rent here.
+    pub payer: String,
+    pub vault: String,
+    pub signature: String,
+}
+
+/// Upload the buffer and hand it to `vault`, the program's upgrade
+/// authority. `out_dir` is the channel's build directory.
+pub fn prepare_for_vault(
+    plan: &DeployPlan,
+    vault: &str,
+    out_dir: &Path,
+    verbose: bool,
+) -> Result<VaultHandoff> {
+    let cluster = plan
+        .cluster
+        .as_deref()
+        .ok_or_else(|| CoreError::message("the channel declares no cluster"))?;
+    let rpc = Rpc::new(&metadata::rpc_url(cluster));
+    let program = solana::pubkey(&plan.program_id)?;
+    let vault_key = solana::pubkey(vault)?;
+    let payer_path = payer_path(plan)?;
+    let payer = Keypair::read(&payer_path)?;
+    let payer_key = payer.pubkey_bytes();
+    assert!(payer_key != vault_key, "a vault has no keypair to pay with");
+    check_fits(&rpc, plan, &program)?;
+
+    // A buffer kept from an earlier run that already went to a vault cannot
+    // be written to again; start a new one.
+    let keypair = out_dir.join(BUFFER_KEYPAIR);
+    if keypair.is_file() {
+        let previous = solana::pubkey(&keys::pubkey_of(&keypair)?)?;
+        if buffer_authority(&rpc, &previous)?.is_some_and(|a| a != payer_key) {
+            remove(&keypair)?;
+        }
+    }
+    let buffer = write_buffer(plan, &payer_path, out_dir, verbose)?;
+    let hand_over = loader_ix(
+        4,
+        vec![
+            AccountMeta::writable(buffer, false),
+            AccountMeta::readonly(payer_key, true),
+            AccountMeta::readonly(vault_key, false),
+        ],
+    )?;
+    let signature = rpc.send_and_confirm(&payer_key, &[hand_over], &[&payer])?;
+    if buffer_authority(&rpc, &buffer)? != Some(vault_key) {
+        return Err(CoreError::message(format!(
+            "transaction {signature} confirmed, but buffer {} is not under {vault}",
+            solana::b58(&buffer)
+        )));
+    }
+    // The keypair only mattered while the upload could be resumed.
+    remove(&keypair)?;
+    Ok(VaultHandoff {
+        buffer: solana::b58(&buffer),
+        payer: payer.pubkey(),
+        vault: vault.to_string(),
+        signature,
+    })
+}
+
+fn remove(path: &Path) -> Result<()> {
+    std::fs::remove_file(path).map_err(|source| CoreError::Io {
+        action: "remove",
+        path: path.to_path_buf(),
+        source,
+    })
 }
 
 /// The `vow` command: `SOLEX_VOW`, the PATH, or inside the Mac app.

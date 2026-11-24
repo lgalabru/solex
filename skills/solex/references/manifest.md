@@ -47,8 +47,9 @@ channel's features; code gates on them with `#[cfg(feature = "hooks")]`.
 Fields per channel: `program_id` (required to build; a channel without one is
 tag-only and exists for others to `include`), `cluster` (`mainnet`, `devnet`,
 `testnet`, `localnet` or an RPC URL, or a list; `mainnet-beta` is accepted
-too), `keypair` (first deploy only), `upgrade_authority` (a keypair file, or the
-address of an authority whose key is not on this machine), `includes`,
+too), `keypair` (first deploy only), `upgrade_authority` (a keypair file, the
+address of an authority whose key is not on this machine, or
+`squads:<multisig account>` for a Squads multisig), `includes`,
 `vars`, `description`.
 
 Before uploading, `solex deploy` reads the program's upgrade authority from
@@ -59,8 +60,19 @@ the fee payer and writes the transaction the authority must sign to
 `target/solex/<channel>/upgrade.tx`, plus a `.vow` review file when the `vow`
 command is installed (devnet and mainnet). The program is not upgraded until
 that transaction is signed and sent, and it expires with its blockhash, about
-a minute. First deploys and program-derived authorities stop before sending
-anything.
+a minute. First deploys to a key held elsewhere and undeclared
+program-derived authorities stop before sending anything.
+
+For a Squads multisig, declare the multisig account, never the vault:
+`upgrade_authority = "squads:<multisig>"` (`/<n>` picks another vault). Solex
+derives the vault and checks the multisig on the cluster at every deploy.
+With the vault in control, `solex deploy` uploads a buffer, hands it to the
+vault and prints the buffer and spill addresses to propose in Squads. A first
+deploy uses the local keypair. `solex authority` shows whether the chain
+agrees with the manifest; `solex authority --transfer --vault <address>` hands
+a program held by a local keypair to the declared multisig. It is permanent:
+never run it for the user, show them the command. `--vault` is the vault
+address from the Squads app, which must match the derived one.
 
 Per-cluster overrides, `[channels.<channel>.<cluster>]`, may set `program_id`,
 `keypair`, `upgrade_authority` and `vars` (merged over the channel's). The

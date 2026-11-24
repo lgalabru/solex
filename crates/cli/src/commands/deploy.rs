@@ -96,6 +96,19 @@ fn pick_targets(plans: Vec<deploy::DeployPlan>) -> Result<Vec<deploy::DeployPlan
         .collect())
 }
 
+/// The command that hands this plan's program over to its declared multisig.
+fn authority_command(plan: &deploy::DeployPlan) -> String {
+    let cluster = plan
+        .cluster
+        .as_deref()
+        .map(|c| format!(" --cluster {c}"))
+        .unwrap_or_default();
+    format!(
+        "solex authority --channel {}{cluster} --transfer",
+        plan.channel
+    )
+}
+
 impl DeployCommand {
     pub fn execute(&self) -> Result<()> {
         let project = commands::load_project(self.manifest.as_deref())?;
@@ -175,14 +188,43 @@ impl DeployCommand {
                     )
                     .frame()
             );
-            if let Some(Signer::Remote {
-                address,
-                kind,
-                deployed,
-            }) = &signer
-            {
-                self.hand_off(&project, &plan, address, kind, *deployed, target)?;
-                continue;
+            match &signer {
+                Some(Signer::Remote {
+                    address,
+                    kind: Kind::Squads(multisig),
+                    deployed: true,
+                }) => {
+                    self.hand_off_to_vault(&project, &plan, address, multisig, target)?;
+                    continue;
+                }
+                Some(Signer::Remote {
+                    address,
+                    kind,
+                    deployed,
+                }) => {
+                    self.hand_off(&project, &plan, address, kind, *deployed, target)?;
+                    continue;
+                }
+                Some(Signer::Outgoing {
+                    address,
+                    to,
+                    deployed: true,
+                    ..
+                }) => {
+                    return Err(CoreError::message(format!(
+                        "the manifest declares upgrade authority {to}, but {} on {target} is \
+                         still controlled by {address}\n  Nothing was sent. Hand it over first: \
+                         {}",
+                        plan.program_id,
+                        authority_command(&plan)
+                    )));
+                }
+                // A first deploy under the local key, handed over afterwards.
+                Some(Signer::Outgoing {
+                    deployed: false, ..
+                })
+                | Some(Signer::Local { .. })
+                | None => {}
             }
             let sp = style::spinner(&format!("Deploying to {target}..."));
             let r = deploy::deploy(&plan, self.verbose);
@@ -200,7 +242,59 @@ impl DeployCommand {
             if self.metadata {
                 self.upload_metadata(&project, &plan)?;
             }
+            if let Some(Signer::Outgoing { address, to, .. }) = &signer {
+                components::print_notice_lines(
+                    components::NoticeLevel::Warning,
+                    "The upgrade authority is not handed over yet",
+                    &[
+                        format!("on chain  {address}"),
+                        format!("declared  {to}"),
+                        String::new(),
+                        format!("Hand it over: {}", authority_command(&plan)),
+                    ],
+                );
+            }
         }
+        Ok(())
+    }
+
+    /// The authority is a multisig vault: upload the buffer, hand it to the
+    /// vault, and say what the multisig has to approve.
+    fn hand_off_to_vault(
+        &self,
+        project: &solex_core::Project,
+        plan: &deploy::DeployPlan,
+        vault: &str,
+        multisig: &solex_core::squads::Multisig,
+        target: &str,
+    ) -> Result<()> {
+        let out_dir = project.target_out_dir(&plan.channel, plan.cluster.as_deref());
+        let sp = style::spinner(&format!("Uploading the program buffer to {target}..."));
+        let r = handoff::prepare_for_vault(plan, vault, &out_dir, self.verbose);
+        sp.finish_and_clear();
+        let h = r?;
+        components::print_notice_lines(
+            components::NoticeLevel::Warning,
+            &format!(
+                "{} on {target} is waiting for the multisig ({})",
+                plan.channel,
+                multisig.describe()
+            ),
+            &[
+                format!("program  {}", plan.program_id),
+                format!("buffer   {}", h.buffer),
+                format!("spill    {}", h.payer),
+                format!("vault    {}", h.vault),
+                String::new(),
+                "The program is not upgraded until the multisig approves and executes an \
+                 upgrade from this buffer. Propose it in Squads as a program upgrade with the \
+                 buffer and spill addresses above; the spill address gets the buffer's rent \
+                 back."
+                    .to_string(),
+                "The buffer now belongs to the vault: only the multisig can use or close it."
+                    .to_string(),
+            ],
+        );
         Ok(())
     }
 
@@ -242,8 +336,9 @@ impl DeployCommand {
                         .map(|o| format!(" owned by {o}"))
                         .unwrap_or_default()
                 ),
-                "Only its program can sign for it; proposing an upgrade through that program \
-                 is not built yet.",
+                "Only its program can sign for it. If it is the vault of a Squads multisig, \
+                 declare `upgrade_authority = \"squads:<multisig account>\"` and solex hands \
+                 each upgrade to the vault.",
             );
         }
         let out_dir = project.target_out_dir(&plan.channel, plan.cluster.as_deref());
